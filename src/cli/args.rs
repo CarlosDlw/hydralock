@@ -41,27 +41,27 @@ pub struct EncryptArgs {
     pub output: PathBuf,
 
     /// Encrypt with a passphrase (prompted securely from TTY).
-    #[arg(long, conflicts_with_all = &["recipient", "recipient_pq"])]
+    #[arg(short = 'p', long, conflicts_with_all = &["recipient", "recipient_pq"])]
     pub passphrase: bool,
 
-    /// X25519 recipient public key file (hex-encoded, .pub file from gen-recipient).
-    #[arg(long, value_name = "FILE", conflicts_with = "passphrase")]
+    /// X25519 recipient public key file (.pub file from gen-recipient).
+    #[arg(short = 'r', long, value_name = "FILE", conflicts_with = "passphrase")]
     pub recipient: Option<PathBuf>,
 
     /// ML-KEM-768+X25519 recipient public key file (.pub file from gen-recipient).
-    #[arg(long, value_name = "FILE", conflicts_with = "passphrase")]
+    #[arg(short = 'R', long, value_name = "FILE", conflicts_with = "passphrase")]
     pub recipient_pq: Option<PathBuf>,
 
     /// Logical name to embed in metadata (defaults to input filename).
-    #[arg(long, value_name = "NAME")]
+    #[arg(short = 'n', long, value_name = "NAME")]
     pub name: Option<String>,
 
     /// MIME type to embed in metadata.
-    #[arg(long, value_name = "MIME")]
+    #[arg(short = 'm', long, value_name = "MIME")]
     pub mime: Option<String>,
 
     /// Argon2id cost profile for passphrase mode.
-    #[arg(long, value_enum, default_value = "balanced")]
+    #[arg(short = 'P', long, value_enum, default_value = "balanced")]
     pub argon2_profile: Argon2ProfileArg,
 
     /// Chunk size in bytes (default: 65536).
@@ -73,7 +73,7 @@ pub struct EncryptArgs {
     pub epoch_size: u32,
 
     /// Overwrite output file if it exists.
-    #[arg(long)]
+    #[arg(short = 'f', long)]
     pub force: bool,
 }
 
@@ -88,15 +88,15 @@ pub struct DecryptArgs {
     pub output: PathBuf,
 
     /// Decrypt using a passphrase (prompted securely from TTY).
-    #[arg(long, conflicts_with = "key")]
+    #[arg(short = 'p', long, conflicts_with = "key")]
     pub passphrase: bool,
 
     /// Secret key file for X25519 or ML-KEM-768+X25519 decryption.
-    #[arg(long, value_name = "FILE", conflicts_with = "passphrase")]
+    #[arg(short = 'k', long, value_name = "FILE", conflicts_with = "passphrase")]
     pub key: Option<PathBuf>,
 
     /// Overwrite output file if it exists.
-    #[arg(long)]
+    #[arg(short = 'f', long)]
     pub force: bool,
 }
 
@@ -114,11 +114,11 @@ pub struct VerifyArgs {
     pub input: PathBuf,
 
     /// Verify footer auth tag using passphrase (requires decrypting FMK).
-    #[arg(long, conflicts_with = "key")]
+    #[arg(short = 'p', long, conflicts_with = "key")]
     pub passphrase: bool,
 
     /// Secret key file for FMK recovery during footer verification.
-    #[arg(long, value_name = "FILE", conflicts_with = "passphrase")]
+    #[arg(short = 'k', long, value_name = "FILE", conflicts_with = "passphrase")]
     pub key: Option<PathBuf>,
 }
 
@@ -133,34 +133,34 @@ pub struct RewrapArgs {
     pub output: PathBuf,
 
     /// Recover FMK from existing passphrase wrapper.
-    #[arg(long, conflicts_with = "old_key")]
+    #[arg(short = 'p', long, conflicts_with = "old_key")]
     pub old_passphrase: bool,
 
     /// Recover FMK from existing key file.
-    #[arg(long, value_name = "FILE", conflicts_with = "old_passphrase")]
+    #[arg(short = 'k', long, value_name = "FILE", conflicts_with = "old_passphrase")]
     pub old_key: Option<PathBuf>,
 
     /// Add a passphrase wrapper to the new container.
-    #[arg(long)]
+    #[arg(short = 'P', long)]
     pub add_passphrase: bool,
 
     /// Add an X25519 recipient public key file to the new container.
-    #[arg(long, value_name = "FILE")]
+    #[arg(short = 'r', long, value_name = "FILE")]
     pub add_recipient: Option<PathBuf>,
 
     /// Add an ML-KEM-768+X25519 recipient public key file to the new container.
-    #[arg(long, value_name = "FILE")]
+    #[arg(short = 'R', long, value_name = "FILE")]
     pub add_recipient_pq: Option<PathBuf>,
 
     /// Overwrite output file if it exists.
-    #[arg(long)]
+    #[arg(short = 'f', long)]
     pub force: bool,
 }
 
 #[derive(Args)]
 pub struct GenRecipientArgs {
     /// Key type to generate.
-    #[arg(long, value_enum, default_value = "x25519")]
+    #[arg(short = 't', long, value_enum, default_value = "x25519")]
     pub key_type: KeyTypeArg,
 
     /// Output file prefix. Writes <prefix>.pub and <prefix>.key.
