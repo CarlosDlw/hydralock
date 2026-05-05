@@ -1,0 +1,23 @@
+{
+  "case_id": "DIFF-PASS-001",
+  "inspect": {
+    "format_version_major": 1,
+    "format_version_minor": 0,
+    "header_hash": "7cfe98e53fbd24bde299e485dca410ebfd192b0f2aec00edc76412f5332fac14",
+    "suite_id": 1,
+    "threshold": 1,
+    "total_container_bytes": 490,
+    "total_shares": 1,
+    "wrapper_count": 1,
+    "wrapper_types": [
+      "PASS-ARGON2ID"
+    ]
+  },
+  "logical_name": "differential-test",
+  "plaintext_hex": "68796472616c6f636b20646966666572656e7469616c207465737420766563746f72202d2d2070617373706872617365206d6f6465",
+  "verify": {
+    "result": "valid"
+  },
+  "version": "1",
+  "wrapper_type": "PassArgon2id"
+}

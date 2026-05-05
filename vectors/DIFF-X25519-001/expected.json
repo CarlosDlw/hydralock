@@ -1,0 +1,23 @@
+{
+  "case_id": "DIFF-X25519-001",
+  "inspect": {
+    "format_version_major": 1,
+    "format_version_minor": 0,
+    "header_hash": "a5f4d0a6c97e3f3495162b1f9608a08cddf4e040ec84143740ebaa8c97b9412e",
+    "suite_id": 1,
+    "threshold": 1,
+    "total_container_bytes": 472,
+    "total_shares": 1,
+    "wrapper_count": 1,
+    "wrapper_types": [
+      "X25519"
+    ]
+  },
+  "logical_name": "differential-test",
+  "plaintext_hex": "68796472616c6f636b20646966666572656e7469616c207465737420766563746f72202d2d20783235353139206d6f6465",
+  "verify": {
+    "result": "valid"
+  },
+  "version": "1",
+  "wrapper_type": "X25519"
+}

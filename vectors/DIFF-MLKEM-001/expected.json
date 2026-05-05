@@ -1,0 +1,23 @@
+{
+  "case_id": "DIFF-MLKEM-001",
+  "inspect": {
+    "format_version_major": 1,
+    "format_version_minor": 0,
+    "header_hash": "2057103c3b37bbdeb8c9e02221621b0941ab410c368cb9c82d2ac0dd8580021f",
+    "suite_id": 1,
+    "threshold": 1,
+    "total_container_bytes": 1570,
+    "total_shares": 1,
+    "wrapper_count": 1,
+    "wrapper_types": [
+      "MLKEM768-X25519"
+    ]
+  },
+  "logical_name": "differential-test",
+  "plaintext_hex": "68796472616c6f636b20646966666572656e7469616c207465737420766563746f72202d2d206d6c2d6b656d2d3736382b783235353139206d6f6465",
+  "verify": {
+    "result": "valid"
+  },
+  "version": "1",
+  "wrapper_type": "MlKem768X25519"
+}

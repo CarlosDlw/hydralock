@@ -1,0 +1,5 @@
+{
+  "passphrase_hex": "68796472616c6f636b2d646966662d706173732d303031",
+  "wrapper_id_label": "pass",
+  "wrapper_type": "PassArgon2id"
+}
