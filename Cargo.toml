@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+blake3 = "1"
+hkdf = "0.12"
+sha2 = "0.10"
+zeroize = { version = "1", features = ["derive"] }
+secrecy = "0.8"
 
 [dev-dependencies]
 serde = { version = "1", features = ["derive"] }
