@@ -39,6 +39,9 @@ pub enum DecryptError {
     PayloadDecrypt(PayloadReaderError),
     PayloadTruncated,
     LayoutOverflow,
+    UnsupportedSuiteId(u16),
+    UnsupportedFormatVersion { major: u16, minor: u16 },
+    PlaintextSizeLimitExceeded { declared: u64, limit: u64 },
 }
 
 impl core::fmt::Display for DecryptError {
@@ -56,6 +59,13 @@ impl core::fmt::Display for DecryptError {
             Self::PayloadDecrypt(e) => write!(f, "payload decrypt error: {e:?}"),
             Self::PayloadTruncated => write!(f, "payload section is truncated"),
             Self::LayoutOverflow => write!(f, "container layout overflow"),
+            Self::UnsupportedSuiteId(id) => write!(f, "unsupported suite_id: 0x{id:04x} (expected 0x0001)"),
+            Self::UnsupportedFormatVersion { major, minor } => {
+                write!(f, "unsupported format version {major}.{minor} (expected 1.0)")
+            }
+            Self::PlaintextSizeLimitExceeded { declared, limit } => {
+                write!(f, "declared plaintext_size {declared} exceeds limit {limit}")
+            }
         }
     }
 }
@@ -75,6 +85,20 @@ pub fn decrypt(container: &[u8], key_material: &OpenKeyMaterial) -> Result<Decry
 
     let header_hash: [u8; 32] = *blake3::hash(&container[..FIXED_HEADER_LEN]).as_bytes();
     let suite_id = fh.suite_id;
+
+    // Reject unknown suite_id and format versions — no silent fallback.
+    const SUPPORTED_SUITE_ID: u16 = 0x0001;
+    const SUPPORTED_FMT_MAJOR: u16 = 1;
+    const SUPPORTED_FMT_MINOR: u16 = 0;
+    if suite_id != SUPPORTED_SUITE_ID {
+        return Err(DecryptError::UnsupportedSuiteId(suite_id));
+    }
+    if fh.format_version_major != SUPPORTED_FMT_MAJOR || fh.format_version_minor != SUPPORTED_FMT_MINOR {
+        return Err(DecryptError::UnsupportedFormatVersion {
+            major: fh.format_version_major,
+            minor: fh.format_version_minor,
+        });
+    }
 
     let policy_start = FIXED_HEADER_LEN;
     let policy_end = policy_start.checked_add(fh.policy_len as usize).ok_or(DecryptError::LayoutOverflow)?;
@@ -125,6 +149,15 @@ pub fn decrypt(container: &[u8], key_material: &OpenKeyMaterial) -> Result<Decry
 
     let k_payload_master = SecretKey32::from_bytes(*subkeys.k_payload_master.expose());
     let mut reader = PayloadReader::new(k_payload_master, file_uuid, suite_id, header_hash, metadata.epoch_size);
+
+    // Guard against DoS via inflated plaintext_size before any allocation.
+    const MAX_PLAINTEXT_BYTES: u64 = 64 * 1024 * 1024 * 1024; // 64 GiB
+    if metadata.plaintext_size > MAX_PLAINTEXT_BYTES {
+        return Err(DecryptError::PlaintextSizeLimitExceeded {
+            declared: metadata.plaintext_size,
+            limit: MAX_PLAINTEXT_BYTES,
+        });
+    }
 
     let mut plaintext = Vec::with_capacity(metadata.plaintext_size as usize);
     for chunk in &payload_section.chunks {

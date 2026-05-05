@@ -18,6 +18,8 @@
 ///   - `verify_container_no_decrypt`: structural integrity only — checks the
 ///     footer auth_tag without requiring access to decrypted plaintext.
 
+use subtle::ConstantTimeEq;
+
 use crate::crypto::manifest::{verify_manifest_root, ManifestError};
 use crate::crypto::secret::SecretKey32;
 use crate::format::footer::{FooterSection, FooterSectionError};
@@ -85,7 +87,7 @@ pub fn verify_footer_auth_tag(
     expected_tag: &[u8; 32],
 ) -> bool {
     let computed = compute_footer_auth_tag(k_manifest, pre_footer_bytes);
-    computed == *expected_tag
+    computed.ct_eq(expected_tag).unwrap_u8() == 1
 }
 
 // ── Full container verify ────────────────────────────────────────────────────

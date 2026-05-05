@@ -9,6 +9,7 @@ blake3 = "1"
 hkdf = "0.12"
 sha2 = "0.10"
 zeroize = { version = "1", features = ["derive"] }
+subtle = "2"
 secrecy = "0.8"
 argon2 = "0.5"
 aes-gcm-siv = "0.11"

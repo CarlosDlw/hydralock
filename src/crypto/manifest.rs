@@ -13,6 +13,7 @@
 /// The keyed root binds the manifest to the specific k_manifest derived from
 /// the file's KDF tree, preventing cross-file manifest splicing.
 
+use subtle::ConstantTimeEq;
 use crate::crypto::secret::SecretKey32;
 
 /// Errors during manifest construction or verification.
@@ -98,8 +99,8 @@ pub fn verify_manifest_root(
     }
     let computed = *hasher.finalize().as_bytes();
 
-    // Constant-time comparison.
-    Ok(computed == *expected_root)
+    // Constant-time comparison prevents timing oracles on the manifest root.
+    Ok(computed.ct_eq(expected_root).unwrap_u8() == 1)
 }
 
 #[cfg(test)]

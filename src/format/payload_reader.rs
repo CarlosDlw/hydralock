@@ -23,6 +23,8 @@ pub enum PayloadReaderError {
     DecryptionFailed { epoch: u32, chunk: u32 },
     /// Attempted to read after the final chunk was already processed.
     ReadAfterFinal,
+    /// Chunk or epoch counter overflowed u32 — container exceeds supported size.
+    ChunkCountOverflow,
 }
 
 impl std::fmt::Display for PayloadReaderError {
@@ -139,10 +141,16 @@ impl PayloadReader {
         )
         .map_err(|_| PayloadReaderError::DecryptionFailed { epoch, chunk })?;
 
-        // Advance position.
-        self.chunk_index_in_epoch += 1;
+        // Advance position with overflow protection.
+        self.chunk_index_in_epoch = self
+            .chunk_index_in_epoch
+            .checked_add(1)
+            .ok_or(PayloadReaderError::ChunkCountOverflow)?;
         if self.chunk_index_in_epoch >= self.epoch_size {
-            self.epoch_index += 1;
+            self.epoch_index = self
+                .epoch_index
+                .checked_add(1)
+                .ok_or(PayloadReaderError::ChunkCountOverflow)?;
             self.chunk_index_in_epoch = 0;
         }
 
