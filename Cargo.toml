@@ -13,7 +13,7 @@ subtle = "2"
 secrecy = "0.8"
 argon2 = "0.5"
 aes-gcm-siv = "0.11"
-rand = "0.8"
+rand = "0.9"
 ciborium = "0.2"
 serde = { version = "1", features = ["derive"] }
 generic-array = "0.14"
