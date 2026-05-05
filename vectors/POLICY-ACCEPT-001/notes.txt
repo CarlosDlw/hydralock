@@ -1,0 +1,1 @@
+Valid policy section. Version is 1, threshold is within range, wrapper_count >= total_shares, reserved bytes are zero.

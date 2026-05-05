@@ -1,0 +1,10 @@
+{
+  "case_id": "WRAPS-ACCEPT-001",
+  "version": "1",
+  "operation": "parse_wraps_section",
+  "expect": "accept",
+  "parsed": {
+    "wraps_version": 1,
+    "wrapper_count": 1
+  }
+}

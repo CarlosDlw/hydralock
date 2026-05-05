@@ -1,0 +1,9 @@
+{
+  "case_id": "WRAPS-REJECT-002",
+  "version": "1",
+  "operation": "parse_wraps_section",
+  "expect": "reject",
+  "error": {
+    "code": "InvalidWrapperCount"
+  }
+}

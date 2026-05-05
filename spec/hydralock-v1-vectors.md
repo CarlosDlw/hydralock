@@ -9,6 +9,8 @@ This document defines the format and the minimum test-vector cases used to valid
 Initial scope of this draft:
 
 - fixed-header vectors;
+- policy-section vectors;
+- wraps-section vectors;
 - acceptance and rejection cases;
 - distribution pattern for implementations in different languages.
 
@@ -120,7 +122,114 @@ Expected result:
 - `reject`
 - `error.code = InvalidLength`
 
-## 5. Case naming
+## 5. Initial minimum set (policy section)
+
+### 5.1 Case POLICY-ACCEPT-001
+
+Description:
+
+- valid policy section with version 1, valid threshold range, and zero reserved bytes.
+
+Operation:
+
+- `parse_policy_section`
+
+Expected result:
+
+- `accept`
+
+### 5.2 Case POLICY-REJECT-001
+
+Description:
+
+- policy section shorter than 8 bytes.
+
+Operation:
+
+- `parse_policy_section`
+
+Expected result:
+
+- `reject`
+- `error.code = InvalidLength`
+
+## 6. Initial minimum set (wraps section)
+
+### 6.1 Case WRAPS-ACCEPT-001
+
+Description:
+
+- valid wraps section with one wrapper entry.
+
+Operation:
+
+- `parse_wraps_section`
+
+Expected result:
+
+- `accept`
+
+### 6.2 Case WRAPS-REJECT-001
+
+Description:
+
+- wraps section with unsupported wraps version.
+
+Operation:
+
+- `parse_wraps_section`
+
+Expected result:
+
+- `reject`
+- `error.code = UnsupportedWrapsVersion`
+
+### 6.3 Case WRAPS-REJECT-002
+
+Description:
+
+- wraps section with trailing bytes after declared entries.
+
+Operation:
+
+- `parse_wraps_section`
+
+Expected result:
+
+- `reject`
+- `error.code = InvalidWrapperCount`
+
+### 6.4 Case WRAPS-REJECT-003
+
+Description:
+
+- wraps section with truncated stanza payload.
+
+Operation:
+
+- `parse_wraps_section`
+
+Expected result:
+
+- `reject`
+- `error.code = TruncatedStanza`
+
+### 6.5 Case WRAPS-REJECT-004
+
+Description:
+
+- wraps section with duplicate wrapper identifiers.
+
+Operation:
+
+- `parse_wraps_section`
+
+Expected result:
+
+- `reject`
+- `error.code = DuplicateWrapperId`
+
+## 7. Case naming
 
 Pattern:
 
@@ -133,7 +242,7 @@ Examples:
 - `WRAP-ACCEPT-003`
 - `PAYLOAD-REJECT-010`
 
-## 6. Conformance rules
+## 8. Conformance rules
 
 For fixed header, an implementation is conformant when it:
 
@@ -141,12 +250,22 @@ For fixed header, an implementation is conformant when it:
 - rejects all `FH-REJECT-*` cases;
 - returns an error consistent with the expected category.
 
-## 7. Open items
+For policy section, an implementation is conformant when it:
+
+- accepts all `POLICY-ACCEPT-*` cases;
+- rejects all `POLICY-REJECT-*` cases;
+- returns an error consistent with the expected category.
+
+For wraps section, an implementation is conformant when it:
+
+- accepts all `WRAPS-ACCEPT-*` cases;
+- rejects all `WRAPS-REJECT-*` cases;
+- returns an error consistent with the expected category.
+
+## 9. Open items
 
 This draft still needs:
 
-- policy section vectors;
-- wrapped secrets section vectors;
 - encrypted metadata vectors;
 - payload/manifest/footer vectors;
 - corruption and downgrade vectors;

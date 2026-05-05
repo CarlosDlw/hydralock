@@ -1,0 +1,12 @@
+{
+  "case_id": "POLICY-ACCEPT-001",
+  "version": "1",
+  "operation": "parse_policy_section",
+  "expect": "accept",
+  "parsed": {
+    "policy_version": 1,
+    "threshold": 2,
+    "total_shares": 3,
+    "wrapper_count": 3
+  }
+}

@@ -1,0 +1,1 @@
+Valid wraps section with one wrapper entry and no trailing bytes.

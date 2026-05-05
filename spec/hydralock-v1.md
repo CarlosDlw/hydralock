@@ -117,21 +117,132 @@ This mapping exists to aid conformance, but the specification is implementation-
 - Parser MUST NOT attempt to repair an invalid container.
 - Implementations MUST avoid platform-dependent behavior for binary fields.
 
-## 9. Open items to finalize v1
+## 9. Policy Section (normative, initial)
+
+### 9.1 Layout
+
+Initial v1 policy section layout is 8 bytes.
+
+```text
+Offset  Size  Field
+0       2     policy_version (u16)
+2       1     threshold (u8)
+3       1     total_shares (u8)
+4       2     wrapper_count (u16)
+6       2     reserved (bytes)
+```
+
+### 9.2 Mandatory rules
+
+- Policy section MUST have exact length 8 bytes.
+- `policy_version` MUST be `1` in v1.
+- `total_shares` MUST be greater than zero.
+- `threshold` MUST be in range `1..=total_shares`.
+- `wrapper_count` MUST be greater than or equal to `total_shares`.
+- `reserved` MUST contain only zero bytes.
+
+### 9.3 Mandatory parser errors
+
+Implementations MUST reject:
+
+- invalid policy section length;
+- unsupported `policy_version`;
+- `total_shares == 0`;
+- invalid threshold range;
+- `wrapper_count < total_shares`;
+- any non-zero byte in policy reserved bytes.
+
+### 9.4 Rust reference mapping
+
+Current reference implementation:
+
+- file: `src/format/policy.rs`
+- constants:
+  - `POLICY_SECTION_LEN = 8`
+- errors:
+  - `InvalidLength`
+  - `UnsupportedPolicyVersion`
+  - `InvalidTotalShares`
+  - `InvalidThreshold`
+  - `InvalidWrapperCount`
+  - `NonZeroReserved`
+
+## 10. Wraps Section (normative, initial)
+
+### 10.1 Layout
+
+The wraps section starts with a fixed 4-byte header and is followed by
+`wrapper_count` variable-size entries.
+
+Wraps section header:
+
+```text
+Offset  Size  Field
+0       2     wraps_version (u16)
+2       2     wrapper_count (u16)
+```
+
+Wrapper entry header:
+
+```text
+Offset  Size  Field
+0       2     wrapper_type (u16)
+2       2     wrapper_flags (u16)
+4       2     wrapper_id_len (u16)
+6       2     stanza_len (u16)
+8       N     wrapper_id bytes
+8+N     M     stanza bytes
+```
+
+### 10.2 Mandatory rules
+
+- `wraps_version` MUST be `1` in v1.
+- `wrapper_id_len` MUST be greater than zero.
+- `wrapper_id` values MUST be unique within the section.
+- Parser MUST consume the section exactly, with no trailing bytes.
+
+### 10.3 Mandatory parser errors
+
+Implementations MUST reject:
+
+- unsupported `wraps_version`;
+- truncated entry header;
+- truncated `wrapper_id` or truncated `stanza`;
+- empty `wrapper_id`;
+- duplicate `wrapper_id`;
+- section with trailing bytes after declared entries.
+
+### 10.4 Rust reference mapping
+
+Current reference implementation:
+
+- file: `src/format/wraps.rs`
+- constants:
+  - `WRAPS_HEADER_LEN = 4`
+  - `WRAPPER_ENTRY_HEADER_LEN = 8`
+- errors:
+  - `InvalidLength`
+  - `UnsupportedWrapsVersion`
+  - `TruncatedEntryHeader`
+  - `TruncatedField`
+  - `InvalidWrapperCount`
+  - `EmptyWrapperId`
+  - `DuplicateWrapperId`
+  - `LengthOverflow`
+
+## 11. Open items to finalize v1
 
 This draft does not yet finalize:
 
-- byte-level definition of policy section;
-- byte-level definition of wrapped secrets section;
 - byte-level definition of metadata section;
 - byte-level definition of payload and footer;
 - final extensibility rules;
 - complete normative algorithms for encrypt/decrypt/verify/rewrap;
 - final full suite and wrapper definitions.
 
-## 10. Immediate next steps
+## 12. Immediate next steps
 
-1. Freeze policy-section fields and validations.
-2. Freeze wraps-section fields and validations.
-3. Define header-to-section offset invariants.
-4. Publish `spec/hydralock-v1-vectors.md` with initial fixed-header vectors.
+1. Define header-to-section offset invariants across all sections.
+2. Extend vectors specification with metadata and footer corruption cases.
+3. Freeze metadata section fields and validations.
+4. Freeze footer section fields and validations.

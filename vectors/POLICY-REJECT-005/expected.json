@@ -1,0 +1,9 @@
+{
+  "case_id": "POLICY-REJECT-005",
+  "version": "1",
+  "operation": "parse_policy_section",
+  "expect": "reject",
+  "error": {
+    "code": "InvalidWrapperCount"
+  }
+}

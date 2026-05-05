@@ -1,0 +1,1 @@
+wrapper_count must be greater than or equal to total_shares.
