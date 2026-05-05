@@ -1,0 +1,1 @@
+Invalid fixed header. Magic is BAD! and must be rejected with InvalidMagic.

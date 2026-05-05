@@ -22,6 +22,8 @@ pub enum FixedHeaderError {
     InvalidLength { expected: usize, actual: usize },
     InvalidMagic([u8; 4]),
     NonZeroReserved,
+    InvalidHeaderLengthField { min: u32, actual: u32 },
+    InvalidPayloadOffset { expected: u64, actual: u64 },
 }
 
 impl fmt::Display for FixedHeaderError {
@@ -32,6 +34,14 @@ impl fmt::Display for FixedHeaderError {
             }
             Self::InvalidMagic(magic) => write!(f, "invalid magic bytes: {magic:02x?}"),
             Self::NonZeroReserved => write!(f, "reserved bytes must be zero"),
+            Self::InvalidHeaderLengthField { min, actual } => write!(
+                f,
+                "invalid header_len field: expected at least {min}, got {actual}"
+            ),
+            Self::InvalidPayloadOffset { expected, actual } => write!(
+                f,
+                "invalid payload_offset: expected {expected}, got {actual}"
+            ),
         }
     }
 }
@@ -57,7 +67,7 @@ impl FixedHeader {
             return Err(FixedHeaderError::NonZeroReserved);
         }
 
-        Ok(Self {
+        let header = Self {
             format_version_major: u16::from_be_bytes([bytes[4], bytes[5]]),
             format_version_minor: u16::from_be_bytes([bytes[6], bytes[7]]),
             suite_id: u16::from_be_bytes([bytes[8], bytes[9]]),
@@ -70,7 +80,11 @@ impl FixedHeader {
                 bytes[30], bytes[31], bytes[32], bytes[33], bytes[34], bytes[35], bytes[36],
                 bytes[37],
             ]),
-        })
+        };
+
+        header.validate_layout()?;
+
+        Ok(header)
     }
 
     pub fn encode(&self) -> [u8; FIXED_HEADER_LEN] {
@@ -88,6 +102,30 @@ impl FixedHeader {
         out[30..38].copy_from_slice(&self.payload_offset.to_be_bytes());
 
         out
+    }
+
+    fn validate_layout(&self) -> Result<(), FixedHeaderError> {
+        let min_header_len = FIXED_HEADER_LEN as u32;
+        if self.header_len < min_header_len {
+            return Err(FixedHeaderError::InvalidHeaderLengthField {
+                min: min_header_len,
+                actual: self.header_len,
+            });
+        }
+
+        let expected_payload_offset = u64::from(self.header_len)
+            + u64::from(self.policy_len)
+            + u64::from(self.wraps_len)
+            + u64::from(self.metadata_len);
+
+        if self.payload_offset != expected_payload_offset {
+            return Err(FixedHeaderError::InvalidPayloadOffset {
+                expected: expected_payload_offset,
+                actual: self.payload_offset,
+            });
+        }
+
+        Ok(())
     }
 }
 
@@ -147,4 +185,41 @@ mod tests {
     fn keeps_magic_constant() {
         assert_eq!(MAGIC, *b"HLK1");
     }
+
+    #[test]
+    fn rejects_header_len_smaller_than_fixed_header() {
+        let mut header = sample_header();
+        header.header_len = (FIXED_HEADER_LEN as u32) - 1;
+        header.payload_offset =
+            u64::from(header.header_len + header.policy_len + header.wraps_len + header.metadata_len);
+
+        let error = FixedHeader::parse(&header.encode())
+            .expect_err("header_len below fixed header length must be rejected");
+
+        assert_eq!(
+            error,
+            FixedHeaderError::InvalidHeaderLengthField {
+                min: FIXED_HEADER_LEN as u32,
+                actual: (FIXED_HEADER_LEN as u32) - 1,
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_payload_offset_mismatch() {
+        let mut header = sample_header();
+        header.payload_offset += 1;
+
+        let error =
+            FixedHeader::parse(&header.encode()).expect_err("payload_offset mismatch must fail");
+
+        assert_eq!(
+            error,
+            FixedHeaderError::InvalidPayloadOffset {
+                expected: 966,
+                actual: 967,
+            }
+        );
+    }
+
 }

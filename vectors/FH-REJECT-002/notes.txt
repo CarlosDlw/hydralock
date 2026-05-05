@@ -1,0 +1,1 @@
+Invalid fixed header. One reserved byte is non-zero and must be rejected with NonZeroReserved.

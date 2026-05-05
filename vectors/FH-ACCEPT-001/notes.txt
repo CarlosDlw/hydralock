@@ -1,0 +1,1 @@
+Valid fixed header. Magic is HLK1, length is exactly 70 bytes, reserved is fully zero.

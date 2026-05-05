@@ -1,0 +1,9 @@
+{
+  "case_id": "FH-REJECT-001",
+  "version": "1",
+  "operation": "parse_fixed_header",
+  "expect": "reject",
+  "error": {
+    "code": "InvalidMagic"
+  }
+}

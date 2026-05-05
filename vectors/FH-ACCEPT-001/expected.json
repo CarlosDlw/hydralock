@@ -1,0 +1,18 @@
+{
+  "case_id": "FH-ACCEPT-001",
+  "version": "1",
+  "operation": "parse_fixed_header",
+  "expect": "accept",
+  "parsed": {
+    "magic": "HLK1",
+    "format_version_major": 1,
+    "format_version_minor": 0,
+    "suite_id": 1,
+    "flags": 16909060,
+    "header_len": 70,
+    "policy_len": 128,
+    "wraps_len": 256,
+    "metadata_len": 512,
+    "payload_offset": 966
+  }
+}
