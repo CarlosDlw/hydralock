@@ -17,6 +17,7 @@ serde = { version = "1", features = ["derive"] }
 generic-array = "0.14"
 chacha20poly1305 = "0.10"
 x25519-dalek = { version = "2", features = ["static_secrets"] }
+ml-kem = { version = "0.3", features = ["zeroize", "hazmat"] }
 
 [dev-dependencies]
 serde = { version = "1", features = ["derive"] }
