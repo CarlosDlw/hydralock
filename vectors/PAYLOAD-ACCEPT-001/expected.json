@@ -1,0 +1,13 @@
+{
+  "case_id": "PAYLOAD-ACCEPT-001",
+  "version": "1",
+  "operation": "parse_payload_section",
+  "expect": "accept",
+  "parsed": {
+    "payload_version": 1,
+    "flags": 0,
+    "chunk_size": 4,
+    "tag_size": 4,
+    "chunk_count": 1
+  }
+}

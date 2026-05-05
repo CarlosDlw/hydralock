@@ -413,7 +413,103 @@ Expected result:
 - `reject`
 - `error.code = InvalidFooterLength`
 
-## 9. Case naming
+## 9. Payload section minimum set
+
+### 9.1 Case PAYLOAD-ACCEPT-001
+
+Description:
+
+- minimal valid payload section: one final chunk, chunk_size=4, tag_size=4.
+
+Operation:
+
+- `parse_payload_section`
+
+Expected result:
+
+- `accept`
+- `parsed.payload_version = 1`
+- `parsed.flags = 0`
+- `parsed.chunk_size = 4`
+- `parsed.tag_size = 4`
+- `parsed.chunk_count = 1`
+
+### 9.2 Case PAYLOAD-REJECT-001
+
+Description:
+
+- payload_version = 2, which is unsupported.
+
+Operation:
+
+- `parse_payload_section`
+
+Expected result:
+
+- `reject`
+- `error.code = UnsupportedPayloadVersion`
+
+### 9.3 Case PAYLOAD-REJECT-002
+
+Description:
+
+- section header reserved bytes are non-zero.
+
+Operation:
+
+- `parse_payload_section`
+
+Expected result:
+
+- `reject`
+- `error.code = NonZeroReserved`
+
+### 9.4 Case PAYLOAD-REJECT-003
+
+Description:
+
+- chunk_size field is zero.
+
+Operation:
+
+- `parse_payload_section`
+
+Expected result:
+
+- `reject`
+- `error.code = ZeroChunkSize`
+
+### 9.5 Case PAYLOAD-REJECT-004
+
+Description:
+
+- chunk entry declares ciphertext_len=8 but only 2 bytes of ciphertext are present.
+
+Operation:
+
+- `parse_payload_section`
+
+Expected result:
+
+- `reject`
+- `error.code = TruncatedCiphertext`
+
+### 9.6 Case PAYLOAD-REJECT-005
+
+Description:
+
+- single chunk with FINAL flag not set; no chunk is ever marked as final.
+
+Operation:
+
+- `parse_payload_section`
+
+Expected result:
+
+- `reject`
+- `error.code = NoFinalChunk`
+
+## 10. Case naming
 
 Pattern:
 
@@ -458,11 +554,16 @@ For footer section, an implementation is conformant when it:
 - rejects all `FOOTER-REJECT-*` cases;
 - returns an error consistent with the expected category.
 
+For payload section, an implementation is conformant when it:
+
+- accepts all `PAYLOAD-ACCEPT-*` cases;
+- rejects all `PAYLOAD-REJECT-*` cases;
+- returns an error consistent with the expected category.
+
 ## 11. Open items
 
 This draft still needs:
 
-- payload/manifest vectors;
 - corruption and downgrade vectors;
 - password mode and asymmetric wrapper vectors;
 - `2-of-3` threshold vectors;

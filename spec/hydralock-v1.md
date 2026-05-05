@@ -336,18 +336,106 @@ Current reference implementation:
     - `InvalidFooterLength`
     - `LengthOverflow`
 
-  ## 13. Open items to finalize v1
+  ## 13. Payload Section (normative, initial)
+
+  ### 13.1 Layout
+
+  The payload section carries one or more authenticated-encrypted chunks.
+  It begins with a 16-byte fixed header followed by a sequence of chunk entries.
+  The section is fully self-describing: every chunk entry declares its own
+  ciphertext length inline.
+
+  Payload section header:
+
+  ```text
+  Offset  Size  Field
+  0       2     payload_version (u16)
+  2       2     flags (u16)
+  4       4     chunk_size (u32)   nominal ciphertext bytes per non-final chunk
+  8       4     tag_size (u32)     auth tag bytes per chunk (fixed for the suite)
+  12      4     reserved (bytes)
+  ```
+
+  Each chunk entry has an 8-byte header followed by the declared ciphertext and
+  tag bytes:
+
+  ```text
+  Offset  Size  Field
+  0       4     ciphertext_len (u32)   actual ciphertext bytes in this chunk
+  4       2     flags (u16)            bit 0: FINAL (0x0001)
+  6       2     reserved (bytes)       must be zero
+  8       N     ciphertext bytes       N = ciphertext_len
+  8+N     M     tag bytes              M = tag_size from section header
+  ```
+
+  The `FINAL` flag (bit 0 of chunk `flags`) marks the last logical chunk.
+
+  ### 13.2 Mandatory rules
+
+  - `payload_version` MUST be `1` in v1.
+  - `reserved` bytes in the section header MUST contain only zero bytes.
+  - `reserved` bytes in each chunk entry MUST contain only zero bytes.
+  - `chunk_size` MUST be greater than zero.
+  - `tag_size` MUST be greater than zero.
+  - `ciphertext_len` of each chunk MUST be greater than zero.
+  - All non-final chunks MUST have `ciphertext_len == chunk_size`.
+  - Exactly one chunk MUST have the `FINAL` flag set.
+  - The `FINAL` chunk MUST be the last chunk in sequence.
+  - Parser MUST consume the section exactly, with no trailing bytes.
+
+  ### 13.3 Mandatory parser errors
+
+  Implementations MUST reject:
+
+  - unsupported `payload_version`;
+  - non-zero `reserved` bytes (section header or chunk entry);
+  - `chunk_size == 0`;
+  - `tag_size == 0`;
+  - `ciphertext_len == 0` in any chunk entry;
+  - non-final chunk with `ciphertext_len != chunk_size`;
+  - truncated chunk entry header;
+  - truncated ciphertext bytes;
+  - truncated tag bytes;
+  - no chunk marked as `FINAL`;
+  - `FINAL` chunk that is not the last chunk in the sequence;
+  - trailing bytes after all declared chunk entries.
+
+  ### 13.4 Rust reference mapping
+
+  Current reference implementation:
+
+  - file: `src/format/payload.rs`
+  - constants:
+    - `PAYLOAD_HEADER_LEN = 16`
+    - `CHUNK_ENTRY_HEADER_LEN = 8`
+    - `CHUNK_FLAG_FINAL = 0x0001`
+  - errors:
+    - `InvalidLength`
+    - `UnsupportedPayloadVersion`
+    - `NonZeroReserved`
+    - `ZeroChunkSize`
+    - `ZeroTagSize`
+    - `TruncatedChunkHeader`
+    - `TruncatedCiphertext`
+    - `TruncatedTag`
+    - `ZeroCiphertextLen`
+    - `ChunkSizeViolation`
+    - `NoFinalChunk`
+    - `FinalNotLast`
+    - `TrailingBytes`
+    - `LengthOverflow`
+
+  ## 14. Open items to finalize v1
 
 This draft does not yet finalize:
 
-- byte-level definition of payload;
 - final extensibility rules;
 - complete normative algorithms for encrypt/decrypt/verify/rewrap;
 - final full suite and wrapper definitions.
 
-## 14. Immediate next steps
+## 15. Immediate next steps
 
 1. Define header-to-section offset invariants across all sections.
 2. Extend vectors specification with payload corruption cases.
-3. Freeze payload section fields and validations.
-4. Define metadata canonical plaintext layout and AAD binding.
+3. Define metadata canonical plaintext layout and AAD binding.
+4. Specify KDF tree (BLAKE3 derive_key) and AAD construction per section.

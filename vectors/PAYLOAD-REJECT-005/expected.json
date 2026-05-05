@@ -1,0 +1,9 @@
+{
+  "case_id": "PAYLOAD-REJECT-005",
+  "version": "1",
+  "operation": "parse_payload_section",
+  "expect": "reject",
+  "error": {
+    "code": "NoFinalChunk"
+  }
+}

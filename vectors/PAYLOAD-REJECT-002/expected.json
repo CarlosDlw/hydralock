@@ -1,0 +1,9 @@
+{
+  "case_id": "PAYLOAD-REJECT-002",
+  "version": "1",
+  "operation": "parse_payload_section",
+  "expect": "reject",
+  "error": {
+    "code": "NonZeroReserved"
+  }
+}
