@@ -1,0 +1,37 @@
+changelog:
+  exclude:
+    labels:
+      - skip-changelog
+      - chore
+  categories:
+    - title: Breaking Changes
+      labels:
+        - breaking
+
+    - title: Features
+      labels:
+        - feat
+        - enhancement
+
+    - title: Fixes
+      labels:
+        - fix
+        - bug
+
+    - title: Security
+      labels:
+        - security
+
+    - title: Documentation
+      labels:
+        - docs
+
+    - title: Testing and CI
+      labels:
+        - test
+        - ci
+
+    - title: Maintenance
+      labels:
+        - refactor
+        - dependencies

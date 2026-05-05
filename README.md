@@ -35,6 +35,17 @@ File encryption container with hybrid post-quantum key encapsulation and rewrap 
 
 ---
 
+## Project Governance
+
+- Contribution process: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Security disclosure policy: [SECURITY.md](SECURITY.md)
+- Community behavior standards: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- License terms: [LICENSE](LICENSE)
+- Release process: [RELEASING.md](RELEASING.md)
+- Pull request template and issue templates: [.github](.github)
+
+---
+
 ## 1. Threat Model
 
 ### Protected against

@@ -3,6 +3,11 @@
 /fuzz/target
 /fuzz/artifacts
 
+# Python artifacts
+**/__pycache__/
+*.pyc
+.pytest_cache/
+
 # Implementation-specific and plan files
 PLAN.md
 TODO.md

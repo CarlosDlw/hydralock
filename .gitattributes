@@ -1,0 +1,4 @@
+* text=auto eol=lf
+
+*.hlock binary
+*.bin binary
