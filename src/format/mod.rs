@@ -3,6 +3,7 @@ pub mod header;
 pub mod metadata;
 pub mod metadata_plaintext;
 pub mod payload;
+pub mod payload_reader;
 pub mod payload_writer;
 pub mod policy;
 pub mod wraps;
