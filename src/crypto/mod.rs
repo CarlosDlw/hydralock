@@ -1,5 +1,6 @@
 pub mod aad;
 pub mod kdf;
+pub mod manifest;
 pub mod metadata;
 pub mod password;
 pub mod payload_crypto;
