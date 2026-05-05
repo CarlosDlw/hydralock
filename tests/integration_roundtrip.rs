@@ -1,6 +1,4 @@
-use hydralock::api::{
-    DecryptOutput, EncryptOptions, KeyMaterial, RecipientSpec, decrypt, encrypt,
-};
+use hydralock::api::{DecryptOutput, EncryptOptions, KeyMaterial, RecipientSpec, decrypt, encrypt};
 use hydralock::crypto::password::Argon2Profile;
 use hydralock::wrapper::mlkem768_x25519::MlKem768X25519RecipientSecretKey;
 use rand::rngs::OsRng;
@@ -21,8 +19,8 @@ fn integration_small_file_passphrase_roundtrip() {
         label: None,
     }];
 
-    let container = encrypt(&plaintext, &recipients, EncryptOptions::default())
-        .expect("encrypt must succeed");
+    let container =
+        encrypt(&plaintext, &recipients, EncryptOptions::default()).expect("encrypt must succeed");
 
     let out = roundtrip(&container, KeyMaterial::Passphrase(pass));
     assert_eq!(out.plaintext, plaintext);
@@ -41,8 +39,8 @@ fn integration_medium_file_x25519_roundtrip() {
         label: None,
     }];
 
-    let container = encrypt(&plaintext, &recipients, EncryptOptions::default())
-        .expect("encrypt must succeed");
+    let container =
+        encrypt(&plaintext, &recipients, EncryptOptions::default()).expect("encrypt must succeed");
 
     let out = roundtrip(&container, KeyMaterial::X25519SecretKey(sk.to_bytes()));
     assert_eq!(out.plaintext, plaintext);
@@ -57,12 +55,12 @@ fn integration_large_file_mlkem_roundtrip() {
     let pk = sk.public_key();
 
     let recipients = vec![RecipientSpec::MlKem768X25519 {
-        recipient_pk: pk,
+        recipient_pk: Box::new(pk),
         label: None,
     }];
 
-    let container = encrypt(&plaintext, &recipients, EncryptOptions::default())
-        .expect("encrypt must succeed");
+    let container =
+        encrypt(&plaintext, &recipients, EncryptOptions::default()).expect("encrypt must succeed");
 
     let out = roundtrip(&container, KeyMaterial::MlKem768X25519SecretKey(sk));
     assert_eq!(out.plaintext, plaintext);
@@ -92,18 +90,21 @@ fn integration_multiple_wrappers_same_container() {
             label: Some(b"x25519-a".to_vec()),
         },
         RecipientSpec::MlKem768X25519 {
-            recipient_pk: mlkem_pk,
+            recipient_pk: Box::new(mlkem_pk),
             label: Some(b"mlkem-a".to_vec()),
         },
     ];
 
-    let container = encrypt(&plaintext, &recipients, EncryptOptions::default())
-        .expect("encrypt must succeed");
+    let container =
+        encrypt(&plaintext, &recipients, EncryptOptions::default()).expect("encrypt must succeed");
 
     let out_pass = roundtrip(&container, KeyMaterial::Passphrase(pass));
     assert_eq!(out_pass.plaintext, plaintext);
 
-    let out_x = roundtrip(&container, KeyMaterial::X25519SecretKey(x25519_sk.to_bytes()));
+    let out_x = roundtrip(
+        &container,
+        KeyMaterial::X25519SecretKey(x25519_sk.to_bytes()),
+    );
     assert_eq!(out_x.plaintext, plaintext);
 
     let out_mlkem = roundtrip(&container, KeyMaterial::MlKem768X25519SecretKey(mlkem_sk));

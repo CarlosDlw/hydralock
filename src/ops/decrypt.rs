@@ -1,8 +1,8 @@
 use crate::crypto::aad::WrapperAadInput;
 use crate::crypto::kdf::{derive_root_key, derive_subkeys};
-use crate::crypto::metadata::{decrypt_metadata, MetadataEncryptionError};
-use crate::crypto::secret::{Fmk, SecretKey32, fmk_from_bytes};
 use crate::crypto::manifest::verify_manifest_root;
+use crate::crypto::metadata::{MetadataEncryptionError, decrypt_metadata};
+use crate::crypto::secret::{Fmk, SecretKey32, fmk_from_bytes};
 use crate::crypto::verify::verify_container_no_decrypt;
 use crate::format::footer::{FooterSection, FooterSectionError};
 use crate::format::header::{FIXED_HEADER_LEN, FixedHeaderError};
@@ -19,6 +19,11 @@ pub enum OpenKeyMaterial {
     Passphrase(Vec<u8>),
     X25519SecretKey([u8; 32]),
     MlKem768X25519SecretKey(MlKem768X25519RecipientSecretKey),
+    /// Open a threshold container by providing the share-root key.
+    /// The decrypt path collects all THRESHOLD stanzas in the container
+    /// and calls `threshold::open` with this key, using
+    /// `WrapperAadInput { wrapper_index: 0, .. }` as the outer AAD.
+    ThresholdShareRoot([u8; 32]),
 }
 
 pub struct DecryptResult {
@@ -60,12 +65,20 @@ impl core::fmt::Display for DecryptError {
             Self::PayloadDecrypt(e) => write!(f, "payload decrypt error: {e:?}"),
             Self::PayloadTruncated => write!(f, "payload section is truncated"),
             Self::LayoutOverflow => write!(f, "container layout overflow"),
-            Self::UnsupportedSuiteId(id) => write!(f, "unsupported suite_id: 0x{id:04x} (expected 0x0001)"),
+            Self::UnsupportedSuiteId(id) => {
+                write!(f, "unsupported suite_id: 0x{id:04x} (expected 0x0001)")
+            }
             Self::UnsupportedFormatVersion { major, minor } => {
-                write!(f, "unsupported format version {major}.{minor} (expected 1.0)")
+                write!(
+                    f,
+                    "unsupported format version {major}.{minor} (expected 1.0)"
+                )
             }
             Self::PlaintextSizeLimitExceeded { declared, limit } => {
-                write!(f, "declared plaintext_size {declared} exceeds limit {limit}")
+                write!(
+                    f,
+                    "declared plaintext_size {declared} exceeds limit {limit}"
+                )
             }
         }
     }
@@ -77,7 +90,10 @@ impl std::error::Error for DecryptError {}
 ///
 /// Convention: wrapper_id = file_uuid(16) || user_label (written by ops::encrypt).
 /// file_uuid is recovered from wrapper_id[0..16] so no separate argument is needed.
-pub fn decrypt(container: &[u8], key_material: &OpenKeyMaterial) -> Result<DecryptResult, DecryptError> {
+pub fn decrypt(
+    container: &[u8],
+    key_material: &OpenKeyMaterial,
+) -> Result<DecryptResult, DecryptError> {
     if container.len() < FIXED_HEADER_LEN {
         return Err(DecryptError::ContainerTooShort);
     }
@@ -94,7 +110,9 @@ pub fn decrypt(container: &[u8], key_material: &OpenKeyMaterial) -> Result<Decry
     if suite_id != SUPPORTED_SUITE_ID {
         return Err(DecryptError::UnsupportedSuiteId(suite_id));
     }
-    if fh.format_version_major != SUPPORTED_FMT_MAJOR || fh.format_version_minor != SUPPORTED_FMT_MINOR {
+    if fh.format_version_major != SUPPORTED_FMT_MAJOR
+        || fh.format_version_minor != SUPPORTED_FMT_MINOR
+    {
         return Err(DecryptError::UnsupportedFormatVersion {
             major: fh.format_version_major,
             minor: fh.format_version_minor,
@@ -102,11 +120,17 @@ pub fn decrypt(container: &[u8], key_material: &OpenKeyMaterial) -> Result<Decry
     }
 
     let policy_start = FIXED_HEADER_LEN;
-    let policy_end = policy_start.checked_add(fh.policy_len as usize).ok_or(DecryptError::LayoutOverflow)?;
+    let policy_end = policy_start
+        .checked_add(fh.policy_len as usize)
+        .ok_or(DecryptError::LayoutOverflow)?;
     let wraps_start = policy_end;
-    let wraps_end = wraps_start.checked_add(fh.wraps_len as usize).ok_or(DecryptError::LayoutOverflow)?;
+    let wraps_end = wraps_start
+        .checked_add(fh.wraps_len as usize)
+        .ok_or(DecryptError::LayoutOverflow)?;
     let metadata_start = wraps_end;
-    let metadata_end = metadata_start.checked_add(fh.metadata_len as usize).ok_or(DecryptError::LayoutOverflow)?;
+    let metadata_end = metadata_start
+        .checked_add(fh.metadata_len as usize)
+        .ok_or(DecryptError::LayoutOverflow)?;
     let payload_start = fh.payload_offset as usize;
 
     if container.len() < metadata_end || container.len() < payload_start {
@@ -122,16 +146,27 @@ pub fn decrypt(container: &[u8], key_material: &OpenKeyMaterial) -> Result<Decry
         .map_err(DecryptError::WrapsParseFailed)?;
     let encrypted_metadata = &container[metadata_start..metadata_end];
 
-    if container.get(payload_start..).map_or(true, |b| b.len() < PAYLOAD_HEADER_LEN) {
+    if container
+        .get(payload_start..)
+        .is_none_or(|b| b.len() < PAYLOAD_HEADER_LEN)
+    {
         return Err(DecryptError::PayloadTruncated);
     }
 
     let payload_end = scan_payload_end(container, payload_start)?;
-    let footer_bytes = container.get(payload_end..).ok_or(DecryptError::ContainerTooShort)?;
+    let footer_bytes = container
+        .get(payload_end..)
+        .ok_or(DecryptError::ContainerTooShort)?;
     let footer = FooterSection::parse(footer_bytes).map_err(DecryptError::FooterParseFailed)?;
 
     let file_uuid = extract_file_uuid(&wraps.wrappers)?;
-    let fmk = try_unwrap_fmk(&wraps.wrappers, key_material, suite_id, &header_hash, &file_uuid)?;
+    let fmk = try_unwrap_fmk(
+        &wraps.wrappers,
+        key_material,
+        suite_id,
+        &header_hash,
+        &file_uuid,
+    )?;
 
     let root_key = derive_root_key(&fmk, &file_uuid);
     let subkeys = derive_subkeys(&root_key);
@@ -142,14 +177,20 @@ pub fn decrypt(container: &[u8], key_material: &OpenKeyMaterial) -> Result<Decry
         .map_err(|_| DecryptError::VerifyFailed)?;
 
     let k_control = SecretKey32::from_bytes(*subkeys.k_control.expose());
-    let metadata = decrypt_metadata(&k_control, encrypted_metadata, &file_uuid, suite_id, &header_hash)
-        .map_err(DecryptError::MetadataDecrypt)?;
+    let metadata = decrypt_metadata(
+        &k_control,
+        encrypted_metadata,
+        &file_uuid,
+        suite_id,
+        &header_hash,
+    )
+    .map_err(DecryptError::MetadataDecrypt)?;
 
     let payload_section = PayloadSection::parse(&container[payload_start..payload_end])
         .map_err(DecryptError::PayloadParseFailed)?;
 
     let k_payload_master = SecretKey32::from_bytes(*subkeys.k_payload_master.expose());
-    let mut reader = PayloadReader::new(k_payload_master, file_uuid, suite_id, header_hash, metadata.epoch_size);
+    let mut reader = PayloadReader::new(k_payload_master, file_uuid, suite_id, metadata.epoch_size);
 
     // Guard against DoS via inflated plaintext_size before any allocation.
     const MAX_PLAINTEXT_BYTES: u64 = 64 * 1024 * 1024 * 1024; // 64 GiB
@@ -165,14 +206,18 @@ pub fn decrypt(container: &[u8], key_material: &OpenKeyMaterial) -> Result<Decry
     for chunk in &payload_section.chunks {
         let mut ct = chunk.ciphertext.clone();
         ct.extend_from_slice(&chunk.tag);
-        let pt = reader.read_chunk(&ct, chunk.is_final()).map_err(DecryptError::PayloadDecrypt)?;
+        let pt = reader
+            .read_chunk(&ct, chunk.is_final())
+            .map_err(DecryptError::PayloadDecrypt)?;
         plaintext.extend_from_slice(&pt);
         chunk_cts.push(ct);
     }
     plaintext.truncate(metadata.plaintext_size as usize);
 
     // Verify manifest root against actual chunk ciphertexts (defense-in-depth).
-    let expected_root: [u8; 32] = footer.manifest_root.as_slice()
+    let expected_root: [u8; 32] = footer
+        .manifest_root
+        .as_slice()
         .try_into()
         .map_err(|_| DecryptError::VerifyFailed)?;
     let manifest_ok = verify_manifest_root(&k_manifest, &chunk_cts, &expected_root)
@@ -181,7 +226,10 @@ pub fn decrypt(container: &[u8], key_material: &OpenKeyMaterial) -> Result<Decry
         return Err(DecryptError::VerifyFailed);
     }
 
-    Ok(DecryptResult { plaintext, metadata })
+    Ok(DecryptResult {
+        plaintext,
+        metadata,
+    })
 }
 
 pub fn extract_file_uuid(wrappers: &[WrapperEntry]) -> Result<[u8; 16], DecryptError> {
@@ -232,7 +280,9 @@ pub fn try_unwrap_fmk(
                 }
             }
             OpenKeyMaterial::MlKem768X25519SecretKey(sk) => {
-                if entry.wrapper_type != crate::wrapper::mlkem768_x25519::WRAPPER_TYPE_MLKEM768_X25519 {
+                if entry.wrapper_type
+                    != crate::wrapper::mlkem768_x25519::WRAPPER_TYPE_MLKEM768_X25519
+                {
                     None
                 } else {
                     MlKem768X25519Stanza::parse(&entry.stanza)
@@ -241,24 +291,60 @@ pub fn try_unwrap_fmk(
                         .map(|k| fmk_from_bytes(*k.expose()))
                 }
             }
+            OpenKeyMaterial::ThresholdShareRoot(_) => None,
         };
 
         if let Some(fmk) = result {
             return Ok(fmk);
         }
     }
+
+    // Threshold path: collect all THRESHOLD stanzas and open them together.
+    // Uses wrapper_index=0 as the shared outer AAD for all shares.
+    if let OpenKeyMaterial::ThresholdShareRoot(k_share_root_bytes) = key_material {
+        use crate::wrapper::threshold::{
+            ShareStanza, WRAPPER_TYPE_THRESHOLD, open as threshold_open,
+        };
+
+        let outer_aad = WrapperAadInput {
+            suite_id,
+            wrapper_index: 0,
+            file_uuid: *file_uuid,
+            header_hash: *header_hash,
+        }
+        .encode();
+
+        let stanzas: Vec<ShareStanza> = wrappers
+            .iter()
+            .filter(|e| e.wrapper_type == WRAPPER_TYPE_THRESHOLD)
+            .filter_map(|e| ShareStanza::parse(&e.stanza).ok())
+            .collect();
+
+        if !stanzas.is_empty() {
+            let k_share_root = crate::crypto::secret::SecretKey32::from_bytes(*k_share_root_bytes);
+            if let Ok(fmk_key) = threshold_open(&stanzas, &k_share_root, &outer_aad) {
+                return Ok(fmk_from_bytes(*fmk_key.expose()));
+            }
+        }
+    }
+
     Err(DecryptError::NoMatchingWrapper)
 }
 
 pub fn scan_payload_end(container: &[u8], payload_offset: usize) -> Result<usize, DecryptError> {
-    let payload_bytes = container.get(payload_offset..).ok_or(DecryptError::ContainerTooShort)?;
+    let payload_bytes = container
+        .get(payload_offset..)
+        .ok_or(DecryptError::ContainerTooShort)?;
 
     if payload_bytes.len() < PAYLOAD_HEADER_LEN {
         return Err(DecryptError::PayloadTruncated);
     }
 
     let tag_size = u32::from_be_bytes([
-        payload_bytes[8], payload_bytes[9], payload_bytes[10], payload_bytes[11],
+        payload_bytes[8],
+        payload_bytes[9],
+        payload_bytes[10],
+        payload_bytes[11],
     ]) as usize;
 
     let mut offset = PAYLOAD_HEADER_LEN;
@@ -267,10 +353,13 @@ pub fn scan_payload_end(container: &[u8], payload_offset: usize) -> Result<usize
             return Err(DecryptError::PayloadTruncated);
         }
         let ciphertext_len = u32::from_be_bytes([
-            payload_bytes[offset], payload_bytes[offset + 1],
-            payload_bytes[offset + 2], payload_bytes[offset + 3],
+            payload_bytes[offset],
+            payload_bytes[offset + 1],
+            payload_bytes[offset + 2],
+            payload_bytes[offset + 3],
         ]) as usize;
-        let chunk_flags = u16::from_be_bytes([payload_bytes[offset + 4], payload_bytes[offset + 5]]);
+        let chunk_flags =
+            u16::from_be_bytes([payload_bytes[offset + 4], payload_bytes[offset + 5]]);
         let is_final = chunk_flags & 0x0001 != 0;
         offset = offset
             .checked_add(8)
@@ -284,5 +373,7 @@ pub fn scan_payload_end(container: &[u8], payload_offset: usize) -> Result<usize
             return Err(DecryptError::PayloadTruncated);
         }
     }
-    payload_offset.checked_add(offset).ok_or(DecryptError::LayoutOverflow)
+    payload_offset
+        .checked_add(offset)
+        .ok_or(DecryptError::LayoutOverflow)
 }

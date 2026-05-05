@@ -1,0 +1,10 @@
+{
+  "case_id": "CHUNK-REORDER-001",
+  "error": {
+    "code": "VerifyFailed"
+  },
+  "expect": "reject",
+  "notes": "chunk[0] and chunk[1] swapped in payload section; chunk_size=64; AAD bound to position breaks AEAD",
+  "operation": "decrypt",
+  "version": "1"
+}

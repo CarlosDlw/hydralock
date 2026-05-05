@@ -1,22 +1,22 @@
-/// Streamable payload writer for dividing plaintext into epochs and chunks.
-///
-/// The writer tracks state:
-/// - plaintext_written: total bytes written so far
-/// - epoch_index: current epoch (0-based)
-/// - chunk_index_in_epoch: chunks written in current epoch (0-based)
-///
-/// Each chunk is encrypted independently with XChaCha20-Poly1305.
-/// Only the last chunk in an epoch can be smaller than chunk_size.
-///
-/// Format logic:
-/// - epoch_size: max chunks per epoch
-/// - chunk_size: max bytes per chunk
-/// - If a chunk reaches chunk_size bytes or epoch reaches epoch_size chunks,
-///   it's finalized and a new one starts.
+//! Streamable payload writer for dividing plaintext into epochs and chunks.
+//!
+//! The writer tracks state:
+//! - plaintext_written: total bytes written so far
+//! - epoch_index: current epoch (0-based)
+//! - chunk_index_in_epoch: chunks written in current epoch (0-based)
+//!
+//! Each chunk is encrypted independently with XChaCha20-Poly1305.
+//! Only the last chunk in an epoch can be smaller than chunk_size.
+//!
+//! Format logic:
+//! - epoch_size: max chunks per epoch
+//! - chunk_size: max bytes per chunk
+//! - If a chunk reaches chunk_size bytes or epoch reaches epoch_size chunks,
+//!   it's finalized and a new one starts.
 
-use crate::crypto::secret::SecretKey32;
 use crate::crypto::kdf::{derive_chunk_key, derive_chunk_nonce};
-use crate::crypto::payload_crypto::{encrypt_chunk, PayloadCryptoError};
+use crate::crypto::payload_crypto::{PayloadCryptoError, encrypt_chunk};
+use crate::crypto::secret::SecretKey32;
 
 /// Builder error types for payload writer.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -65,7 +65,6 @@ pub struct PayloadWriter {
     k_payload_master: SecretKey32,
     file_uuid: [u8; 16],
     suite_id: u16,
-    header_hash: [u8; 32],
 
     // Output: all encrypted chunks in order
     encrypted_chunks: Vec<EncryptedChunkEntry>,
@@ -77,7 +76,6 @@ impl PayloadWriter {
         k_payload_master: SecretKey32,
         file_uuid: [u8; 16],
         suite_id: u16,
-        header_hash: [u8; 32],
         chunk_size: u32,
         epoch_size: u32,
         plaintext_total_size: u64,
@@ -103,7 +101,6 @@ impl PayloadWriter {
             k_payload_master,
             file_uuid,
             suite_id,
-            header_hash,
             encrypted_chunks: Vec::new(),
         })
     }
@@ -164,7 +161,6 @@ impl PayloadWriter {
             &self.chunk_buffer,
             &self.file_uuid,
             self.suite_id,
-            &self.header_hash,
             self.epoch_index,
             self.chunk_index_in_epoch,
             plaintext_chunk_len,
@@ -231,10 +227,6 @@ mod tests {
         [8u8; 16]
     }
 
-    fn test_header_hash() -> [u8; 32] {
-        [9u8; 32]
-    }
-
     #[test]
     fn writer_single_chunk() -> Result<(), Box<dyn std::error::Error>> {
         let k_payload_master = test_payload_master();
@@ -244,7 +236,6 @@ mod tests {
             k_payload_master,
             test_uuid(),
             0x01,
-            test_header_hash(),
             4096,
             100,
             plaintext.len() as u64,
@@ -267,7 +258,6 @@ mod tests {
             k_payload_master,
             test_uuid(),
             0x01,
-            test_header_hash(),
             4096, // 4KB chunks
             100,
             plaintext.len() as u64,
@@ -291,7 +281,6 @@ mod tests {
             k_payload_master,
             test_uuid(),
             0x01,
-            test_header_hash(),
             2000, // 2KB chunks
             10,
             plaintext.len() as u64,
@@ -318,7 +307,6 @@ mod tests {
             k_payload_master,
             test_uuid(),
             0x01,
-            test_header_hash(),
             0, // Invalid!
             100,
             1000,
@@ -335,7 +323,6 @@ mod tests {
             k_payload_master,
             test_uuid(),
             0x01,
-            test_header_hash(),
             4096,
             0, // Invalid!
             1000,
@@ -352,7 +339,6 @@ mod tests {
             k_payload_master,
             test_uuid(),
             0x01,
-            test_header_hash(),
             4096,
             100,
             0, // Invalid!
@@ -371,7 +357,6 @@ mod tests {
             k_payload_master,
             test_uuid(),
             0x01,
-            test_header_hash(),
             1024, // 1KB chunks
             2,    // 2 chunks per epoch
             plaintext.len() as u64,

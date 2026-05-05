@@ -75,7 +75,10 @@ fn assert_accept_case(case_id: &str) {
 
     assert_eq!(parsed.footer_version, expected_parsed.footer_version);
     assert_eq!(parsed.flags, expected_parsed.flags);
-    assert_eq!(parsed.manifest_root.len(), expected_parsed.manifest_root_len);
+    assert_eq!(
+        parsed.manifest_root.len(),
+        expected_parsed.manifest_root_len
+    );
     assert_eq!(parsed.auth_tag.len(), expected_parsed.auth_tag_len);
 }
 

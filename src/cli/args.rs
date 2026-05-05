@@ -137,7 +137,12 @@ pub struct RewrapArgs {
     pub old_passphrase: bool,
 
     /// Recover FMK from existing key file.
-    #[arg(short = 'k', long, value_name = "FILE", conflicts_with = "old_passphrase")]
+    #[arg(
+        short = 'k',
+        long,
+        value_name = "FILE",
+        conflicts_with = "old_passphrase"
+    )]
     pub old_key: Option<PathBuf>,
 
     /// Add a passphrase wrapper to the new container.

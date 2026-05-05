@@ -39,7 +39,9 @@ impl core::fmt::Display for KeyError {
 impl std::error::Error for KeyError {}
 
 impl From<std::io::Error> for KeyError {
-    fn from(e: std::io::Error) -> Self { Self::Io(e) }
+    fn from(e: std::io::Error) -> Self {
+        Self::Io(e)
+    }
 }
 
 /// Encode bytes in PEM-like format with the given header/footer.
@@ -81,7 +83,10 @@ pub fn encode_x25519_public(pk: &[u8; 32]) -> String {
 pub fn decode_x25519_public(pem: &str) -> Result<[u8; 32], KeyError> {
     let bytes = decode_pem(X25519_PUB_HEADER, X25519_PUB_FOOTER, pem)?;
     if bytes.len() != 32 {
-        return Err(KeyError::InvalidLength { expected: 32, actual: bytes.len() });
+        return Err(KeyError::InvalidLength {
+            expected: 32,
+            actual: bytes.len(),
+        });
     }
     let mut arr = [0u8; 32];
     arr.copy_from_slice(&bytes);
@@ -95,7 +100,10 @@ pub fn encode_x25519_secret(sk: &[u8; 32]) -> String {
 pub fn decode_x25519_secret(pem: &str) -> Result<[u8; 32], KeyError> {
     let bytes = decode_pem(X25519_SEC_HEADER, X25519_SEC_FOOTER, pem)?;
     if bytes.len() != 32 {
-        return Err(KeyError::InvalidLength { expected: 32, actual: bytes.len() });
+        return Err(KeyError::InvalidLength {
+            expected: 32,
+            actual: bytes.len(),
+        });
     }
     let mut arr = [0u8; 32];
     arr.copy_from_slice(&bytes);
@@ -126,13 +134,19 @@ pub fn decode_mlkem_public(pem: &str) -> Result<MlKem768X25519RecipientPublicKey
     let bytes = decode_pem(MLKEM_PUB_HEADER, MLKEM_PUB_FOOTER, pem)?;
     let expected = 32 + MLKEM768_EK_LEN;
     if bytes.len() != expected {
-        return Err(KeyError::InvalidLength { expected, actual: bytes.len() });
+        return Err(KeyError::InvalidLength {
+            expected,
+            actual: bytes.len(),
+        });
     }
     let mut x25519_pk = [0u8; 32];
     x25519_pk.copy_from_slice(&bytes[..32]);
     let mut mlkem768_ek_bytes = [0u8; MLKEM768_EK_LEN];
     mlkem768_ek_bytes.copy_from_slice(&bytes[32..]);
-    Ok(MlKem768X25519RecipientPublicKey { x25519_pk, mlkem768_ek_bytes })
+    Ok(MlKem768X25519RecipientPublicKey {
+        x25519_pk,
+        mlkem768_ek_bytes,
+    })
 }
 
 /// Secret key wire: x25519_sk(32) || mlkem768_seed(64) = 96 bytes.
@@ -147,13 +161,19 @@ pub fn decode_mlkem_secret(pem: &str) -> Result<MlKem768X25519RecipientSecretKey
     let bytes = decode_pem(MLKEM_SEC_HEADER, MLKEM_SEC_FOOTER, pem)?;
     let expected = 32 + MLKEM768_SEED_LEN;
     if bytes.len() != expected {
-        return Err(KeyError::InvalidLength { expected, actual: bytes.len() });
+        return Err(KeyError::InvalidLength {
+            expected,
+            actual: bytes.len(),
+        });
     }
     let mut x25519_sk = [0u8; 32];
     x25519_sk.copy_from_slice(&bytes[..32]);
     let mut mlkem768_dk_seed = [0u8; MLKEM768_SEED_LEN];
     mlkem768_dk_seed.copy_from_slice(&bytes[32..]);
-    Ok(MlKem768X25519RecipientSecretKey::new(x25519_sk, mlkem768_dk_seed))
+    Ok(MlKem768X25519RecipientSecretKey::new(
+        x25519_sk,
+        mlkem768_dk_seed,
+    ))
 }
 
 pub fn load_mlkem_public(path: &Path) -> Result<MlKem768X25519RecipientPublicKey, KeyError> {

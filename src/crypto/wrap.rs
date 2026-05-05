@@ -1,6 +1,6 @@
 use aes_gcm_siv::{
-    aead::{Aead, KeyInit, Payload},
     Aes256GcmSiv, Key, Nonce,
+    aead::{Aead, KeyInit, Payload},
 };
 
 use crate::crypto::password::Kek;
@@ -83,11 +83,7 @@ pub fn wrap_key(
 /// `wrapped` must be exactly `WRAPPED_KEY_LEN` (60) bytes.
 /// If the authentication tag does not verify, returns `DecryptFailed`.
 /// The returned `SecretKey32` is zeroized on drop.
-pub fn unwrap_key(
-    kek: &Kek,
-    wrapped: &[u8],
-    aad: &[u8],
-) -> Result<SecretKey32, WrapError> {
+pub fn unwrap_key(kek: &Kek, wrapped: &[u8], aad: &[u8]) -> Result<SecretKey32, WrapError> {
     if wrapped.len() != WRAPPED_KEY_LEN {
         return Err(WrapError::InvalidWrappedLength {
             expected: WRAPPED_KEY_LEN,
@@ -100,10 +96,7 @@ pub fn unwrap_key(
 
     let cipher = Aes256GcmSiv::new(Key::<Aes256GcmSiv>::from_slice(kek.expose()));
     let pt = cipher
-        .decrypt(
-            nonce,
-            Payload { msg: ct, aad },
-        )
+        .decrypt(nonce, Payload { msg: ct, aad })
         .map_err(|_| WrapError::DecryptFailed)?;
 
     // pt must be exactly 32 bytes.
@@ -115,7 +108,7 @@ pub fn unwrap_key(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crypto::password::{derive_kek_from_passphrase, Argon2Params};
+    use crate::crypto::password::{Argon2Params, derive_kek_from_passphrase};
     use crate::crypto::secret::SecretKey32;
 
     fn test_kek() -> Kek {

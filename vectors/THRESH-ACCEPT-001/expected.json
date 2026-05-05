@@ -1,0 +1,25 @@
+{
+  "case_id": "THRESH-ACCEPT-001",
+  "inspect": {
+    "format_version_major": 1,
+    "format_version_minor": 0,
+    "header_hash": "6fb38d0498d0e6258b43e69aff4389033e142b60b2dc3a641e50d485527a6779",
+    "suite_id": 1,
+    "threshold": 2,
+    "total_container_bytes": 634,
+    "total_shares": 3,
+    "wrapper_count": 3,
+    "wrapper_types": [
+      "THRESHOLD",
+      "THRESHOLD",
+      "THRESHOLD"
+    ]
+  },
+  "logical_name": "thresh-test.bin",
+  "plaintext_hex": "68796472616c6f636b20322d6f662d33207468726573686f6c6420616363657074616e6365207465737420766563746f72",
+  "verify": {
+    "result": "valid"
+  },
+  "version": "1",
+  "wrapper_type": "Threshold"
+}

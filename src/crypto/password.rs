@@ -18,9 +18,9 @@ impl Argon2Profile {
     /// Memory cost in kibibytes.
     pub fn memory_kib(&self) -> u32 {
         match self {
-            Self::Interactive => 65_536,      // 64 MiB
-            Self::Balanced => 262_144,        // 256 MiB
-            Self::Paranoid => 1_048_576,      // 1024 MiB
+            Self::Interactive => 65_536, // 64 MiB
+            Self::Balanced => 262_144,   // 256 MiB
+            Self::Paranoid => 1_048_576, // 1024 MiB
         }
     }
 

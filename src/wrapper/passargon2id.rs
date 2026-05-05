@@ -1,9 +1,9 @@
 use rand::RngCore;
 
-use crate::crypto::password::{derive_kek_from_passphrase, Argon2Params, PasswordError};
+use crate::crypto::password::{Argon2Params, PasswordError, derive_kek_from_passphrase};
 use crate::crypto::secret::SecretKey32;
 use crate::crypto::wrap::{
-    unwrap_key, wrap_key, WrapError, AES_GCM_SIV_NONCE_LEN, WRAPPED_KEY_LEN,
+    AES_GCM_SIV_NONCE_LEN, WRAPPED_KEY_LEN, WrapError, unwrap_key, wrap_key,
 };
 
 /// Stanza type identifier for the PASS-ARGON2ID wrapper.
@@ -67,10 +67,16 @@ impl core::fmt::Display for PassArgon2idError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::InvalidLength { expected, actual } => {
-                write!(f, "invalid stanza length: expected {expected}, got {actual}")
+                write!(
+                    f,
+                    "invalid stanza length: expected {expected}, got {actual}"
+                )
             }
             Self::UnsupportedStanzaVersion { expected, actual } => {
-                write!(f, "unsupported stanza version: expected {expected}, got {actual}")
+                write!(
+                    f,
+                    "unsupported stanza version: expected {expected}, got {actual}"
+                )
             }
             Self::UnsupportedArgon2Version { expected, actual } => {
                 write!(
@@ -82,7 +88,10 @@ impl core::fmt::Display for PassArgon2idError {
             Self::KeyDerivation(e) => write!(f, "passphrase key derivation failed: {e}"),
             Self::WrapFailed => write!(f, "key wrapping failed"),
             Self::UnwrapFailed => {
-                write!(f, "key unwrapping failed: wrong passphrase or corrupted stanza")
+                write!(
+                    f,
+                    "key unwrapping failed: wrong passphrase or corrupted stanza"
+                )
             }
         }
     }
@@ -132,7 +141,8 @@ impl PassArgon2idStanza {
 
         let mut wrapped_key = [0u8; WRAPPED_KEY_LEN - AES_GCM_SIV_NONCE_LEN];
         wrapped_key.copy_from_slice(
-            &bytes[WRAPPED_KEY_OFFSET..WRAPPED_KEY_OFFSET + (WRAPPED_KEY_LEN - AES_GCM_SIV_NONCE_LEN)],
+            &bytes[WRAPPED_KEY_OFFSET
+                ..WRAPPED_KEY_OFFSET + (WRAPPED_KEY_LEN - AES_GCM_SIV_NONCE_LEN)],
         );
 
         Ok(Self {
@@ -157,8 +167,7 @@ impl PassArgon2idStanza {
         out[10..14].copy_from_slice(&self.params.time_cost.to_be_bytes());
         out[14..18].copy_from_slice(&self.params.parallelism.to_be_bytes());
         out[SALT_OFFSET..SALT_OFFSET + 32].copy_from_slice(&self.params.salt);
-        out[NONCE_OFFSET..NONCE_OFFSET + AES_GCM_SIV_NONCE_LEN]
-            .copy_from_slice(&self.wrap_nonce);
+        out[NONCE_OFFSET..NONCE_OFFSET + AES_GCM_SIV_NONCE_LEN].copy_from_slice(&self.wrap_nonce);
         out[WRAPPED_KEY_OFFSET..WRAPPED_KEY_OFFSET + (WRAPPED_KEY_LEN - AES_GCM_SIV_NONCE_LEN)]
             .copy_from_slice(&self.wrapped_key);
         out
@@ -180,8 +189,8 @@ impl PassArgon2idStanza {
             .map_err(PassArgon2idError::KeyDerivation)?;
 
         // Build the full wrapped blob: nonce || ciphertext_with_tag
-        let wrapped_full = wrap_key(&kek, key, &wrap_nonce, aad)
-            .map_err(|_| PassArgon2idError::WrapFailed)?;
+        let wrapped_full =
+            wrap_key(&kek, key, &wrap_nonce, aad).map_err(|_| PassArgon2idError::WrapFailed)?;
 
         // Strip the nonce prefix (nonce is stored separately in the stanza layout)
         let mut wrapped_key = [0u8; WRAPPED_KEY_LEN - AES_GCM_SIV_NONCE_LEN];
@@ -307,9 +316,14 @@ mod tests {
     #[test]
     fn wrong_aad_fails_open() {
         let key = test_key();
-        let stanza =
-            PassArgon2idStanza::seal(&key, minimal_params(), b"pass", test_nonce(), b"correct-aad")
-                .expect("seal");
+        let stanza = PassArgon2idStanza::seal(
+            &key,
+            minimal_params(),
+            b"pass",
+            test_nonce(),
+            b"correct-aad",
+        )
+        .expect("seal");
 
         let err = stanza.open(b"pass", b"wrong-aad").expect_err("should fail");
         assert_eq!(err, PassArgon2idError::UnwrapFailed);
@@ -317,8 +331,7 @@ mod tests {
 
     #[test]
     fn parse_rejects_wrong_length() {
-        let err =
-            PassArgon2idStanza::parse(&[0u8; 109]).expect_err("short input must fail");
+        let err = PassArgon2idStanza::parse(&[0u8; 109]).expect_err("short input must fail");
         assert_eq!(
             err,
             PassArgon2idError::InvalidLength {
@@ -331,14 +344,9 @@ mod tests {
     #[test]
     fn parse_rejects_wrong_stanza_version() {
         let key = test_key();
-        let stanza = PassArgon2idStanza::seal(
-            &key,
-            minimal_params(),
-            b"pass",
-            test_nonce(),
-            b"aad",
-        )
-        .expect("seal");
+        let stanza =
+            PassArgon2idStanza::seal(&key, minimal_params(), b"pass", test_nonce(), b"aad")
+                .expect("seal");
         let mut encoded = stanza.encode();
         encoded[1] = 2; // stanza_version high byte → 2
         let err = PassArgon2idStanza::parse(&encoded).expect_err("bad version must fail");

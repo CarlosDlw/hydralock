@@ -1,0 +1,10 @@
+{
+  "case_id": "META-CORRUPT-001",
+  "error": {
+    "code": "VerifyFailed"
+  },
+  "expect": "reject",
+  "notes": "byte at metadata ciphertext offset 272 XOR'd with 0x55; footer MAC fails before metadata decrypt",
+  "operation": "decrypt",
+  "version": "1"
+}

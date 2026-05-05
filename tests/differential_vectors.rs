@@ -7,7 +7,6 @@
 /// A second implementation in any language must pass the same set of vectors
 /// by reading container.hlock + key_material.json and producing outputs that
 /// match expected.json.
-
 use std::fs;
 use std::path::PathBuf;
 
@@ -15,9 +14,7 @@ use hydralock::format::header::{FIXED_HEADER_LEN, FixedHeader};
 use hydralock::format::policy::PolicySection;
 use hydralock::format::wraps::WrapsSection;
 use hydralock::ops::decrypt::{OpenKeyMaterial, decrypt};
-use hydralock::wrapper::mlkem768_x25519::{
-    MLKEM768_SEED_LEN, MlKem768X25519RecipientSecretKey,
-};
+use hydralock::wrapper::mlkem768_x25519::{MLKEM768_SEED_LEN, MlKem768X25519RecipientSecretKey};
 use serde::Deserialize;
 
 fn vectors_dir() -> PathBuf {
@@ -156,27 +153,33 @@ fn run_differential_vector(case_id: &str) {
         "[{case_id}] total_shares mismatch",
     );
     assert_eq!(
-        wraps.wrappers.len(), expected.inspect.wrapper_count,
+        wraps.wrappers.len(),
+        expected.inspect.wrapper_count,
         "[{case_id}] wrapper_count mismatch",
     );
 
-    let actual_wrapper_types: Vec<String> = wraps.wrappers.iter().map(|w| {
-        use hydralock::wrapper::mlkem768_x25519::WRAPPER_TYPE_MLKEM768_X25519;
-        use hydralock::wrapper::passargon2id::WRAPPER_TYPE_PASS_ARGON2ID;
-        use hydralock::wrapper::x25519::WRAPPER_TYPE_X25519;
-        match w.wrapper_type {
-            WRAPPER_TYPE_PASS_ARGON2ID => "PASS-ARGON2ID".to_string(),
-            WRAPPER_TYPE_X25519 => "X25519".to_string(),
-            WRAPPER_TYPE_MLKEM768_X25519 => "MLKEM768-X25519".to_string(),
-            t => format!("UNKNOWN-0x{t:04x}"),
-        }
-    }).collect();
+    let actual_wrapper_types: Vec<String> = wraps
+        .wrappers
+        .iter()
+        .map(|w| {
+            use hydralock::wrapper::mlkem768_x25519::WRAPPER_TYPE_MLKEM768_X25519;
+            use hydralock::wrapper::passargon2id::WRAPPER_TYPE_PASS_ARGON2ID;
+            use hydralock::wrapper::x25519::WRAPPER_TYPE_X25519;
+            match w.wrapper_type {
+                WRAPPER_TYPE_PASS_ARGON2ID => "PASS-ARGON2ID".to_string(),
+                WRAPPER_TYPE_X25519 => "X25519".to_string(),
+                WRAPPER_TYPE_MLKEM768_X25519 => "MLKEM768-X25519".to_string(),
+                t => format!("UNKNOWN-0x{t:04x}"),
+            }
+        })
+        .collect();
     assert_eq!(
         actual_wrapper_types, expected.inspect.wrapper_types,
         "[{case_id}] wrapper_types mismatch",
     );
     assert_eq!(
-        container.len(), expected.inspect.total_container_bytes,
+        container.len(),
+        expected.inspect.total_container_bytes,
         "[{case_id}] total_container_bytes mismatch — container was regenerated without committing",
     );
 
@@ -192,27 +195,41 @@ fn run_differential_vector(case_id: &str) {
 fn build_key_material(km: &KeyMaterialJson) -> OpenKeyMaterial {
     match km.wrapper_type.as_str() {
         "PassArgon2id" => {
-            let hex = km.passphrase_hex.as_deref().expect("passphrase_hex required for PassArgon2id");
+            let hex = km
+                .passphrase_hex
+                .as_deref()
+                .expect("passphrase_hex required for PassArgon2id");
             let bytes = hex::decode(hex).expect("passphrase_hex must be valid hex");
             OpenKeyMaterial::Passphrase(bytes)
         }
         "X25519" => {
-            let hex = km.recipient_sk_hex.as_deref().expect("recipient_sk_hex required for X25519");
+            let hex = km
+                .recipient_sk_hex
+                .as_deref()
+                .expect("recipient_sk_hex required for X25519");
             let bytes = hex::decode(hex).expect("recipient_sk_hex must be valid hex");
             let mut arr = [0u8; 32];
             arr.copy_from_slice(&bytes);
             OpenKeyMaterial::X25519SecretKey(arr)
         }
         "MlKem768X25519" => {
-            let x_hex = km.x25519_sk_hex.as_deref().expect("x25519_sk_hex required for MlKem768X25519");
-            let m_hex = km.mlkem_dk_seed_hex.as_deref().expect("mlkem_dk_seed_hex required for MlKem768X25519");
+            let x_hex = km
+                .x25519_sk_hex
+                .as_deref()
+                .expect("x25519_sk_hex required for MlKem768X25519");
+            let m_hex = km
+                .mlkem_dk_seed_hex
+                .as_deref()
+                .expect("mlkem_dk_seed_hex required for MlKem768X25519");
             let x_bytes = hex::decode(x_hex).expect("x25519_sk_hex must be valid hex");
             let m_bytes = hex::decode(m_hex).expect("mlkem_dk_seed_hex must be valid hex");
             let mut x_arr = [0u8; 32];
             let mut m_arr = [0u8; MLKEM768_SEED_LEN];
             x_arr.copy_from_slice(&x_bytes);
             m_arr.copy_from_slice(&m_bytes);
-            OpenKeyMaterial::MlKem768X25519SecretKey(MlKem768X25519RecipientSecretKey::new(x_arr, m_arr))
+            OpenKeyMaterial::MlKem768X25519SecretKey(MlKem768X25519RecipientSecretKey::new(
+                x_arr, m_arr,
+            ))
         }
         t => panic!("unknown wrapper_type in key_material.json: {t}"),
     }

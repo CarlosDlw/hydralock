@@ -30,7 +30,10 @@ impl fmt::Display for FixedHeaderError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidLength { expected, actual } => {
-                write!(f, "invalid fixed header length: expected {expected}, got {actual}")
+                write!(
+                    f,
+                    "invalid fixed header length: expected {expected}, got {actual}"
+                )
             }
             Self::InvalidMagic(magic) => write!(f, "invalid magic bytes: {magic:02x?}"),
             Self::NonZeroReserved => write!(f, "reserved bytes must be zero"),
@@ -190,8 +193,9 @@ mod tests {
     fn rejects_header_len_smaller_than_fixed_header() {
         let mut header = sample_header();
         header.header_len = (FIXED_HEADER_LEN as u32) - 1;
-        header.payload_offset =
-            u64::from(header.header_len + header.policy_len + header.wraps_len + header.metadata_len);
+        header.payload_offset = u64::from(
+            header.header_len + header.policy_len + header.wraps_len + header.metadata_len,
+        );
 
         let error = FixedHeader::parse(&header.encode())
             .expect_err("header_len below fixed header length must be rejected");
@@ -221,5 +225,4 @@ mod tests {
             }
         );
     }
-
 }

@@ -1,0 +1,10 @@
+{
+  "case_id": "SIZE-INCONS-001",
+  "error": {
+    "code": "ContainerTooShort"
+  },
+  "expect": "reject",
+  "notes": "metadata_len inflated by 65536 bytes (bytes 26-29) and payload_offset adjusted consistently; actual container has no extra bytes → ContainerTooShort",
+  "operation": "decrypt",
+  "version": "1"
+}

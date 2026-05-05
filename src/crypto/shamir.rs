@@ -1,20 +1,20 @@
-/// Shamir Secret Sharing over GF(256) for HydraLock v1.
-///
-/// Splits a 32-byte secret into `n` shares such that any `t` of them
-/// reconstruct the original. Each secret byte is processed independently
-/// as a degree-(t-1) polynomial over GF(256).
-///
-/// GF(256) is constructed with the AES-standard irreducible polynomial:
-///   p(x) = x^8 + x^4 + x^3 + x + 1  (0x11b)
-///
-/// Security properties:
-///   - Information-theoretic: with fewer than `t` shares, the secret is
-///     perfectly hidden (no computational assumptions needed).
-///   - Uniqueness: each share has a distinct non-zero `id` (x-coordinate).
-///   - Identity: share id 0 is reserved as the secret's x=0 value.
-///   - Tampering detection: a corrupt share will silently produce a wrong
-///     reconstruction; callers must verify authenticity out-of-band (e.g.,
-///     via the wrapped-share MAC in `wrapper::threshold`).
+//! Shamir Secret Sharing over GF(256) for HydraLock v1.
+//!
+//! Splits a 32-byte secret into `n` shares such that any `t` of them
+//! reconstruct the original. Each secret byte is processed independently
+//! as a degree-(t-1) polynomial over GF(256).
+//!
+//! GF(256) is constructed with the AES-standard irreducible polynomial:
+//!   p(x) = x^8 + x^4 + x^3 + x + 1  (0x11b)
+//!
+//! Security properties:
+//!   - Information-theoretic: with fewer than `t` shares, the secret is
+//!     perfectly hidden (no computational assumptions needed).
+//!   - Uniqueness: each share has a distinct non-zero `id` (x-coordinate).
+//!   - Identity: share id 0 is reserved as the secret's x=0 value.
+//!   - Tampering detection: a corrupt share will silently produce a wrong
+//!     reconstruction; callers must verify authenticity out-of-band (e.g.,
+//!     via the wrapped-share MAC in `wrapper::threshold`).
 
 use rand::RngCore;
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -142,7 +142,10 @@ pub fn combine(shares: &[ShamirShare], threshold: u8) -> Result<[u8; 32], Shamir
     let t = threshold as usize;
 
     if shares.len() < t {
-        return Err(ShamirError::NotEnoughShares { got: shares.len(), need: t });
+        return Err(ShamirError::NotEnoughShares {
+            got: shares.len(),
+            need: t,
+        });
     }
 
     // Validate share ids.
@@ -166,7 +169,7 @@ pub fn combine(shares: &[ShamirShare], threshold: u8) -> Result<[u8; 32], Shamir
 
     // Lagrange interpolation at x=0 for each of the 32 bytes independently.
     let mut secret = [0u8; 32];
-    for byte_idx in 0..32 {
+    for (byte_idx, secret_byte) in secret.iter_mut().enumerate() {
         let mut acc: u8 = 0;
         for i in 0..t {
             let xi = active[i].id;
@@ -176,18 +179,18 @@ pub fn combine(shares: &[ShamirShare], threshold: u8) -> Result<[u8; 32], Shamir
             // In GF(256): subtraction = XOR, so (0 - xj) = xj and (xi - xj) = xi XOR xj.
             let mut num: u8 = 1;
             let mut den: u8 = 1;
-            for j in 0..t {
+            for (j, share_j) in active.iter().enumerate() {
                 if j != i {
-                    let xj = active[j].id;
-                    num = gf_mul(num, xj);              // numerator *= xj (= 0 XOR xj = xj)
-                    den = gf_mul(den, gf_add(xi, xj));  // denominator *= xi XOR xj
+                    let xj = share_j.id;
+                    num = gf_mul(num, xj); // numerator *= xj (= 0 XOR xj = xj)
+                    den = gf_mul(den, gf_add(xi, xj)); // denominator *= xi XOR xj
                 }
             }
             // L_i(0) = num / den = num * den^{-1}
             let l = gf_mul(num, gf_inv(den));
             acc = gf_add(acc, gf_mul(yi, l));
         }
-        secret[byte_idx] = acc;
+        *secret_byte = acc;
     }
 
     Ok(secret)
@@ -218,10 +221,10 @@ fn gf_mul(mut a: u8, mut b: u8) -> u8 {
         if b & 1 != 0 {
             result ^= a;
         }
-        carry = a >> 7;       // high bit of a (coefficient of x^7)
+        carry = a >> 7; // high bit of a (coefficient of x^7)
         a <<= 1;
         if carry != 0 {
-            a ^= 0x1b;        // reduce mod p(x)
+            a ^= 0x1b; // reduce mod p(x)
         }
         b >>= 1;
     }
@@ -236,21 +239,21 @@ fn gf_inv(a: u8) -> u8 {
         return 0;
     }
     // a^254 = (a^2)^127
-    let a2 = gf_mul(a, a);     // a^2
-    let a4 = gf_mul(a2, a2);   // a^4
-    let a8 = gf_mul(a4, a4);   // a^8
-    let a16 = gf_mul(a8, a8);  // a^16
-    let a32 = gf_mul(a16, a16);// a^32
-    let a64 = gf_mul(a32, a32);// a^64
-    let a128 = gf_mul(a64, a64);// a^128
+    let a2 = gf_mul(a, a); // a^2
+    let a4 = gf_mul(a2, a2); // a^4
+    let a8 = gf_mul(a4, a4); // a^8
+    let a16 = gf_mul(a8, a8); // a^16
+    let a32 = gf_mul(a16, a16); // a^32
+    let a64 = gf_mul(a32, a32); // a^64
+    let a128 = gf_mul(a64, a64); // a^128
 
     // 254 = 128 + 64 + 32 + 16 + 8 + 4 + 2 = 0b11111110
     let r = gf_mul(a128, a64); // a^192
-    let r = gf_mul(r, a32);    // a^224
-    let r = gf_mul(r, a16);    // a^240
-    let r = gf_mul(r, a8);     // a^248
-    let r = gf_mul(r, a4);     // a^252
-    let r = gf_mul(r, a2);     // a^254
+    let r = gf_mul(r, a32); // a^224
+    let r = gf_mul(r, a16); // a^240
+    let r = gf_mul(r, a8); // a^248
+    let r = gf_mul(r, a4); // a^252
+    let r = gf_mul(r, a2); // a^254
     r
 }
 
@@ -357,11 +360,23 @@ mod tests {
         assert_eq!(shares.len(), 5);
 
         // First 3, middle 3, last 3 — all reconstruct.
-        let r = combine(&[shares[0].clone(), shares[1].clone(), shares[2].clone()], 3).unwrap();
+        let r = combine(
+            &[shares[0].clone(), shares[1].clone(), shares[2].clone()],
+            3,
+        )
+        .unwrap();
         assert_eq!(r, secret);
-        let r = combine(&[shares[1].clone(), shares[2].clone(), shares[3].clone()], 3).unwrap();
+        let r = combine(
+            &[shares[1].clone(), shares[2].clone(), shares[3].clone()],
+            3,
+        )
+        .unwrap();
         assert_eq!(r, secret);
-        let r = combine(&[shares[2].clone(), shares[3].clone(), shares[4].clone()], 3).unwrap();
+        let r = combine(
+            &[shares[2].clone(), shares[3].clone(), shares[4].clone()],
+            3,
+        )
+        .unwrap();
         assert_eq!(r, secret);
     }
 
@@ -374,7 +389,10 @@ mod tests {
         // (because random polynomial coefficients are added).
         // At least one share should differ from zero.
         let any_nonzero = shares.iter().any(|s| s.value.iter().any(|&b| b != 0));
-        assert!(any_nonzero, "all shares were zero for a zero secret — polynomial degenerate?");
+        assert!(
+            any_nonzero,
+            "all shares were zero for a zero secret — polynomial degenerate?"
+        );
     }
 
     #[test]
@@ -395,7 +413,10 @@ mod tests {
         let mut rng = seeded_rng();
         let shares = split(&secret, 3, 5, &mut rng).unwrap();
         let err = combine(&shares[..2], 3).unwrap_err();
-        assert!(matches!(err, ShamirError::NotEnoughShares { got: 2, need: 3 }));
+        assert!(matches!(
+            err,
+            ShamirError::NotEnoughShares { got: 2, need: 3 }
+        ));
     }
 
     #[test]
@@ -410,7 +431,10 @@ mod tests {
 
     #[test]
     fn zero_share_id_returns_error() {
-        let bad_share = ShamirShare { id: 0, value: [0u8; 32] };
+        let bad_share = ShamirShare {
+            id: 0,
+            value: [0u8; 32],
+        };
         let err = combine(&[bad_share], 1).unwrap_err();
         assert!(matches!(err, ShamirError::InvalidShareId));
     }

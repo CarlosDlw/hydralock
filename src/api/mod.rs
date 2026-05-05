@@ -8,8 +8,8 @@ use crate::format::metadata_plaintext::{MetadataPlaintext, PaddingBucket};
 use crate::format::policy::PolicySection;
 use crate::format::wraps::{WrapperEntry, WrapsSection};
 use crate::ops::decrypt::{
-    DecryptError, DecryptResult, OpenKeyMaterial, decrypt as decrypt_container,
-    extract_file_uuid, try_unwrap_fmk,
+    DecryptError, DecryptResult, OpenKeyMaterial, decrypt as decrypt_container, extract_file_uuid,
+    try_unwrap_fmk,
 };
 use crate::ops::encrypt::{EncryptError, EncryptInput, WrapperSpec, encrypt as encrypt_container};
 use crate::ops::rewrap::{
@@ -78,7 +78,7 @@ pub enum RecipientSpec {
         label: Option<Vec<u8>>,
     },
     MlKem768X25519 {
-        recipient_pk: MlKem768X25519RecipientPublicKey,
+        recipient_pk: Box<MlKem768X25519RecipientPublicKey>,
         label: Option<Vec<u8>>,
     },
 }
@@ -121,7 +121,10 @@ pub struct RewrapPolicy {
 
 impl Default for RewrapPolicy {
     fn default() -> Self {
-        Self { threshold: 1, total_shares: 1 }
+        Self {
+            threshold: 1,
+            total_shares: 1,
+        }
     }
 }
 
@@ -164,9 +167,14 @@ pub fn encrypt(
 /// Decrypt a HydraLock container using one key source.
 pub fn decrypt(container: &[u8], key: KeyMaterial) -> Result<DecryptOutput, ApiError> {
     let open = to_open_key_material(key);
-    let DecryptResult { plaintext, metadata } =
-        decrypt_container(container, &open).map_err(ApiError::Decrypt)?;
-    Ok(DecryptOutput { plaintext, metadata })
+    let DecryptResult {
+        plaintext,
+        metadata,
+    } = decrypt_container(container, &open).map_err(ApiError::Decrypt)?;
+    Ok(DecryptOutput {
+        plaintext,
+        metadata,
+    })
 }
 
 /// Rewrap a container without re-encrypting payload bytes.
@@ -188,8 +196,8 @@ pub fn rewrap_container(
         return Err(ApiError::InvalidContainerLayout);
     }
 
-    let fixed =
-        FixedHeader::parse(&container[..FIXED_HEADER_LEN]).map_err(|_| ApiError::InvalidContainerLayout)?;
+    let fixed = FixedHeader::parse(&container[..FIXED_HEADER_LEN])
+        .map_err(|_| ApiError::InvalidContainerLayout)?;
     let header_hash: [u8; 32] = *blake3::hash(&container[..FIXED_HEADER_LEN]).as_bytes();
 
     let wraps_start = FIXED_HEADER_LEN
@@ -233,7 +241,8 @@ pub fn rewrap_container(
         &new_header_hash,
     )?;
 
-    rewrap_container_bytes(container, &fmk, &file_uuid, new_policy, new_wrappers).map_err(ApiError::Rewrap)
+    rewrap_container_bytes(container, &fmk, &file_uuid, new_policy, new_wrappers)
+        .map_err(ApiError::Rewrap)
 }
 
 /// Public low-level surface for advanced integrations.
@@ -259,21 +268,27 @@ fn build_encrypt_wrappers(recipients: &[RecipientSpec]) -> Vec<WrapperSpec> {
             } => WrapperSpec::PassArgon2id {
                 passphrase: passphrase.clone(),
                 profile: *profile,
-                wrapper_id: label.clone().unwrap_or_else(|| format!("pass{idx}").into_bytes()),
+                wrapper_id: label
+                    .clone()
+                    .unwrap_or_else(|| format!("pass{idx}").into_bytes()),
             },
             RecipientSpec::X25519 {
                 recipient_pk,
                 label,
             } => WrapperSpec::X25519 {
                 recipient_pk: *recipient_pk,
-                wrapper_id: label.clone().unwrap_or_else(|| format!("rcpt{idx}").into_bytes()),
+                wrapper_id: label
+                    .clone()
+                    .unwrap_or_else(|| format!("rcpt{idx}").into_bytes()),
             },
             RecipientSpec::MlKem768X25519 {
                 recipient_pk,
                 label,
             } => WrapperSpec::MlKem768X25519 {
                 recipient_pk: recipient_pk.clone(),
-                wrapper_id: label.clone().unwrap_or_else(|| format!("rcpt{idx}").into_bytes()),
+                wrapper_id: label
+                    .clone()
+                    .unwrap_or_else(|| format!("rcpt{idx}").into_bytes()),
             },
         })
         .collect()
@@ -340,11 +355,14 @@ fn seal_rewrap_wrappers(
                 ..
             } => {
                 let params = Argon2Params::from_profile(*profile, [0u8; 32]);
-                let stanza = PassArgon2idStanza::seal_with_rng(fmk_key, params, passphrase, &aad, &mut rng)
-                    .map_err(|e| ApiError::Encrypt(EncryptError::WrapperSealFailed {
-                        index: idx,
-                        reason: format!("passphrase stanza seal error: {e:?}"),
-                    }))?;
+                let stanza =
+                    PassArgon2idStanza::seal_with_rng(fmk_key, params, passphrase, &aad, &mut rng)
+                        .map_err(|e| {
+                            ApiError::Encrypt(EncryptError::WrapperSealFailed {
+                                index: idx,
+                                reason: format!("passphrase stanza seal error: {e:?}"),
+                            })
+                        })?;
                 WrapperEntry {
                     wrapper_type: WRAPPER_TYPE_PASS_ARGON2ID,
                     wrapper_flags: 0,
@@ -354,10 +372,12 @@ fn seal_rewrap_wrappers(
             }
             RecipientSpec::X25519 { recipient_pk, .. } => {
                 let stanza = X25519Stanza::seal_with_rng(fmk_key, recipient_pk, &aad, &mut rng)
-                    .map_err(|e| ApiError::Encrypt(EncryptError::WrapperSealFailed {
-                        index: idx,
-                        reason: format!("x25519 stanza seal error: {e:?}"),
-                    }))?;
+                    .map_err(|e| {
+                        ApiError::Encrypt(EncryptError::WrapperSealFailed {
+                            index: idx,
+                            reason: format!("x25519 stanza seal error: {e:?}"),
+                        })
+                    })?;
                 WrapperEntry {
                     wrapper_type: WRAPPER_TYPE_X25519,
                     wrapper_flags: 0,
@@ -366,11 +386,14 @@ fn seal_rewrap_wrappers(
                 }
             }
             RecipientSpec::MlKem768X25519 { recipient_pk, .. } => {
-                let stanza = MlKem768X25519Stanza::seal_with_rng(fmk_key, recipient_pk, &aad, &mut rng)
-                    .map_err(|e| ApiError::Encrypt(EncryptError::WrapperSealFailed {
-                        index: idx,
-                        reason: format!("mlkem768-x25519 stanza seal error: {e:?}"),
-                    }))?;
+                let stanza =
+                    MlKem768X25519Stanza::seal_with_rng(fmk_key, recipient_pk, &aad, &mut rng)
+                        .map_err(|e| {
+                            ApiError::Encrypt(EncryptError::WrapperSealFailed {
+                                index: idx,
+                                reason: format!("mlkem768-x25519 stanza seal error: {e:?}"),
+                            })
+                        })?;
                 WrapperEntry {
                     wrapper_type: WRAPPER_TYPE_MLKEM768_X25519,
                     wrapper_flags: 0,

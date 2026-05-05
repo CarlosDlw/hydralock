@@ -1,0 +1,10 @@
+{
+  "case_id": "WRAP-CORRUPT-001",
+  "error": {
+    "code": "NoMatchingWrapper"
+  },
+  "expect": "reject",
+  "notes": "byte at offset 110 (first stanza byte) XOR'd with 0x01",
+  "operation": "decrypt",
+  "version": "1"
+}

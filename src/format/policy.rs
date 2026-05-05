@@ -12,11 +12,23 @@ pub struct PolicySection {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PolicySectionError {
-    InvalidLength { expected: usize, actual: usize },
-    UnsupportedPolicyVersion { expected: u16, actual: u16 },
+    InvalidLength {
+        expected: usize,
+        actual: usize,
+    },
+    UnsupportedPolicyVersion {
+        expected: u16,
+        actual: u16,
+    },
     InvalidTotalShares,
-    InvalidThreshold { threshold: u8, total_shares: u8 },
-    InvalidWrapperCount { wrapper_count: u16, total_shares: u8 },
+    InvalidThreshold {
+        threshold: u8,
+        total_shares: u8,
+    },
+    InvalidWrapperCount {
+        wrapper_count: u16,
+        total_shares: u8,
+    },
     NonZeroReserved,
 }
 
@@ -24,7 +36,10 @@ impl fmt::Display for PolicySectionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidLength { expected, actual } => {
-                write!(f, "invalid policy section length: expected {expected}, got {actual}")
+                write!(
+                    f,
+                    "invalid policy section length: expected {expected}, got {actual}"
+                )
             }
             Self::UnsupportedPolicyVersion { expected, actual } => write!(
                 f,

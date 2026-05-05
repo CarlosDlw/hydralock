@@ -12,13 +12,26 @@ pub struct FooterSection {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FooterSectionError {
-    InvalidLength { min: usize, actual: usize },
-    UnsupportedFooterVersion { expected: u16, actual: u16 },
+    InvalidLength {
+        min: usize,
+        actual: usize,
+    },
+    UnsupportedFooterVersion {
+        expected: u16,
+        actual: u16,
+    },
     NonZeroReserved,
     EmptyManifestRoot,
     EmptyAuthTag,
-    TruncatedField { field: &'static str, declared: usize, actual: usize },
-    InvalidFooterLength { declared: usize, actual: usize },
+    TruncatedField {
+        field: &'static str,
+        declared: usize,
+        actual: usize,
+    },
+    InvalidFooterLength {
+        declared: usize,
+        actual: usize,
+    },
     LengthOverflow,
 }
 
@@ -26,10 +39,16 @@ impl fmt::Display for FooterSectionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidLength { min, actual } => {
-                write!(f, "invalid footer section length: expected at least {min}, got {actual}")
+                write!(
+                    f,
+                    "invalid footer section length: expected at least {min}, got {actual}"
+                )
             }
             Self::UnsupportedFooterVersion { expected, actual } => {
-                write!(f, "unsupported footer version: expected {expected}, got {actual}")
+                write!(
+                    f,
+                    "unsupported footer version: expected {expected}, got {actual}"
+                )
             }
             Self::NonZeroReserved => write!(f, "reserved bytes must be zero"),
             Self::EmptyManifestRoot => write!(f, "manifest_root must not be empty"),
@@ -43,7 +62,10 @@ impl fmt::Display for FooterSectionError {
                 "truncated footer field '{field}': declared {declared}, available {actual}"
             ),
             Self::InvalidFooterLength { declared, actual } => {
-                write!(f, "invalid footer length: declared {declared}, actual {actual}")
+                write!(
+                    f,
+                    "invalid footer length: declared {declared}, actual {actual}"
+                )
             }
             Self::LengthOverflow => write!(f, "length overflow while processing footer section"),
         }
@@ -144,12 +166,13 @@ impl FooterSection {
             return Err(FooterSectionError::EmptyAuthTag);
         }
 
-        let manifest_root_len =
-            u16::try_from(self.manifest_root.len()).map_err(|_| FooterSectionError::LengthOverflow)?;
+        let manifest_root_len = u16::try_from(self.manifest_root.len())
+            .map_err(|_| FooterSectionError::LengthOverflow)?;
         let auth_tag_len =
             u16::try_from(self.auth_tag.len()).map_err(|_| FooterSectionError::LengthOverflow)?;
 
-        let mut out = Vec::with_capacity(FOOTER_HEADER_LEN + self.manifest_root.len() + self.auth_tag.len());
+        let mut out =
+            Vec::with_capacity(FOOTER_HEADER_LEN + self.manifest_root.len() + self.auth_tag.len());
         out.extend_from_slice(&self.footer_version.to_be_bytes());
         out.extend_from_slice(&self.flags.to_be_bytes());
         out.extend_from_slice(&manifest_root_len.to_be_bytes());
@@ -164,7 +187,7 @@ impl FooterSection {
 
 #[cfg(test)]
 mod tests {
-    use super::{FooterSection, FooterSectionError, FOOTER_HEADER_LEN};
+    use super::{FOOTER_HEADER_LEN, FooterSection, FooterSectionError};
 
     fn sample_footer() -> FooterSection {
         FooterSection {
@@ -172,8 +195,8 @@ mod tests {
             flags: 0,
             manifest_root: b"root".to_vec(),
             auth_tag: vec![
-                0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-                0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10,
+                0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E,
+                0x0F, 0x10,
             ],
         }
     }
@@ -231,8 +254,8 @@ mod tests {
             0x00, 0x10, // auth_tag_len = 16
             0x00, 0x00, 0x00, 0x00, // reserved
             b'r', b'o', b'o', b't', // manifest_root
-            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-            0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, // 15 bytes (truncated)
+            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E,
+            0x0F, // 15 bytes (truncated)
         ];
 
         let error = FooterSection::parse(&encoded).expect_err("truncated auth_tag must fail");
@@ -254,8 +277,8 @@ mod tests {
             0x00, 0x00, // manifest_root_len = 0
             0x00, 0x10, // auth_tag_len = 16
             0x00, 0x00, 0x00, 0x00, // reserved
-            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-            0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10,
+            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E,
+            0x0F, 0x10,
         ];
 
         let error = FooterSection::parse(&encoded).expect_err("empty manifest_root must fail");

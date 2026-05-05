@@ -307,9 +307,9 @@ let mlkem_x25519_seal(fmk: bitstring,
      chunk_size, epoch_size, and manifest_root to the k_control key.
      Any modification to these fields invalidates the AEAD tag.
 
-  3. The payload AEAD (XChaCha20-Poly1305 per chunk) binds each chunk to
-     its (epoch, chunk, file_uuid, suite_id, header_hash, plaintext_len,
-     is_final) tuple. Reordering, splicing, or truncation of chunks is
+    3. The payload AEAD (XChaCha20-Poly1305 per chunk) binds each chunk to
+      its (epoch, chunk, file_uuid, suite_id, plaintext_len, is_final)
+      tuple. Reordering, splicing, or truncation of chunks is
      detected at the first mismatched AEAD tag.
 
   4. The footer auth_tag (BLAKE3_keyed over pre-footer bytes) binds all

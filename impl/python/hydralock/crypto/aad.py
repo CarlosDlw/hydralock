@@ -8,10 +8,9 @@ def build_chunk_aad(
     chunk_idx: int,
     pt_chunk_len: int,
     is_final: bool,
-    header_hash: bytes,
 ) -> bytes:
-    # 69 bytes: magic(4) + version(2) + suite_id(2) + file_uuid(16) +
-    #           epoch_idx(4) + chunk_idx(4) + pt_chunk_len(4) + is_final(1) + header_hash(32)
+    # 37 bytes: magic(4) + version(2) + suite_id(2) + file_uuid(16) +
+    #           epoch_idx(4) + chunk_idx(4) + pt_chunk_len(4) + is_final(1)
     aad = b"HLK1"
     aad += struct.pack(">H", 1)
     aad += struct.pack(">H", suite_id)
@@ -20,7 +19,6 @@ def build_chunk_aad(
     aad += struct.pack(">I", chunk_idx)
     aad += struct.pack(">I", pt_chunk_len)
     aad += b"\x01" if is_final else b"\x00"
-    aad += header_hash
     return aad
 
 

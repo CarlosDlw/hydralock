@@ -29,18 +29,43 @@ impl ChunkEntry {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PayloadSectionError {
-    InvalidLength { min: usize, actual: usize },
-    UnsupportedPayloadVersion { expected: u16, actual: u16 },
+    InvalidLength {
+        min: usize,
+        actual: usize,
+    },
+    UnsupportedPayloadVersion {
+        expected: u16,
+        actual: u16,
+    },
     NonZeroReserved,
     ZeroChunkSize,
     ZeroTagSize,
-    TruncatedChunkHeader { index: usize },
-    TruncatedCiphertext { index: usize, declared: usize, actual: usize },
-    TruncatedTag { index: usize, declared: usize, actual: usize },
-    ZeroCiphertextLen { index: usize },
-    ChunkSizeViolation { index: usize, expected: u32, actual: usize },
+    TruncatedChunkHeader {
+        index: usize,
+    },
+    TruncatedCiphertext {
+        index: usize,
+        declared: usize,
+        actual: usize,
+    },
+    TruncatedTag {
+        index: usize,
+        declared: usize,
+        actual: usize,
+    },
+    ZeroCiphertextLen {
+        index: usize,
+    },
+    ChunkSizeViolation {
+        index: usize,
+        expected: u32,
+        actual: usize,
+    },
     NoFinalChunk,
-    FinalNotLast { index: usize, total: usize },
+    FinalNotLast {
+        index: usize,
+        total: usize,
+    },
     TrailingBytes,
     LengthOverflow,
 }
@@ -49,10 +74,16 @@ impl fmt::Display for PayloadSectionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidLength { min, actual } => {
-                write!(f, "invalid payload section length: expected at least {min}, got {actual}")
+                write!(
+                    f,
+                    "invalid payload section length: expected at least {min}, got {actual}"
+                )
             }
             Self::UnsupportedPayloadVersion { expected, actual } => {
-                write!(f, "unsupported payload version: expected {expected}, got {actual}")
+                write!(
+                    f,
+                    "unsupported payload version: expected {expected}, got {actual}"
+                )
             }
             Self::NonZeroReserved => write!(f, "reserved bytes must be zero"),
             Self::ZeroChunkSize => write!(f, "chunk_size must be greater than zero"),
@@ -60,18 +91,30 @@ impl fmt::Display for PayloadSectionError {
             Self::TruncatedChunkHeader { index } => {
                 write!(f, "truncated chunk entry header at index {index}")
             }
-            Self::TruncatedCiphertext { index, declared, actual } => write!(
+            Self::TruncatedCiphertext {
+                index,
+                declared,
+                actual,
+            } => write!(
                 f,
                 "truncated ciphertext at chunk {index}: declared {declared}, available {actual}"
             ),
-            Self::TruncatedTag { index, declared, actual } => write!(
+            Self::TruncatedTag {
+                index,
+                declared,
+                actual,
+            } => write!(
                 f,
                 "truncated tag at chunk {index}: declared {declared}, available {actual}"
             ),
             Self::ZeroCiphertextLen { index } => {
                 write!(f, "ciphertext_len must not be zero at chunk index {index}")
             }
-            Self::ChunkSizeViolation { index, expected, actual } => write!(
+            Self::ChunkSizeViolation {
+                index,
+                expected,
+                actual,
+            } => write!(
                 f,
                 "non-final chunk {index} has ciphertext_len {actual}, expected {expected}"
             ),
@@ -139,9 +182,12 @@ impl PayloadSection {
                 return Err(PayloadSectionError::TruncatedChunkHeader { index });
             }
 
-            let ciphertext_len =
-                u32::from_be_bytes([bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]])
-                    as usize;
+            let ciphertext_len = u32::from_be_bytes([
+                bytes[offset],
+                bytes[offset + 1],
+                bytes[offset + 2],
+                bytes[offset + 3],
+            ]) as usize;
             let chunk_flags = u16::from_be_bytes([bytes[offset + 4], bytes[offset + 5]]);
             let chunk_reserved = [bytes[offset + 6], bytes[offset + 7]];
             offset = chunk_hdr_end;
@@ -299,7 +345,7 @@ impl PayloadSection {
 
 #[cfg(test)]
 mod tests {
-    use super::{ChunkEntry, CHUNK_FLAG_FINAL, PayloadSection, PayloadSectionError};
+    use super::{CHUNK_FLAG_FINAL, ChunkEntry, PayloadSection, PayloadSectionError};
 
     fn sample_payload() -> PayloadSection {
         PayloadSection {
@@ -371,7 +417,9 @@ mod tests {
                 tag: vec![0x01, 0x02, 0x03, 0x04],
             }],
         };
-        let error = payload.encode().expect_err("missing final chunk must fail on encode");
+        let error = payload
+            .encode()
+            .expect_err("missing final chunk must fail on encode");
         assert_eq!(error, PayloadSectionError::NoFinalChunk);
     }
 

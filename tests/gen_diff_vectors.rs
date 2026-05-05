@@ -5,7 +5,6 @@
 ///
 /// This produces the canonical binary vectors in vectors/DIFF-*/ that are
 /// committed to the repository. Re-run only when the wire format changes.
-
 use std::fs;
 use std::path::PathBuf;
 
@@ -19,13 +18,13 @@ use hydralock::ops::encrypt::{
     DEFAULT_CHUNK_SIZE, DEFAULT_EPOCH_SIZE, EncryptInput, WrapperSpec, encrypt,
 };
 use hydralock::wrapper::mlkem768_x25519::{
-    MLKEM768_SEED_LEN, WRAPPER_TYPE_MLKEM768_X25519, MlKem768X25519RecipientSecretKey,
+    MLKEM768_SEED_LEN, MlKem768X25519RecipientSecretKey, WRAPPER_TYPE_MLKEM768_X25519,
 };
 use hydralock::wrapper::passargon2id::WRAPPER_TYPE_PASS_ARGON2ID;
 use hydralock::wrapper::x25519::WRAPPER_TYPE_X25519;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use x25519_dalek::{PublicKey, StaticSecret};
 
 fn vectors_dir() -> PathBuf {
@@ -50,7 +49,11 @@ fn inspect_container(container: &[u8]) -> Value {
     let wraps = WrapsSection::parse(&container[policy_end..wraps_end]).unwrap();
 
     let header_hash = hex::encode(blake3::hash(&container[..FIXED_HEADER_LEN]).as_bytes());
-    let wrapper_types: Vec<String> = wraps.wrappers.iter().map(|w| wrapper_type_name(w.wrapper_type)).collect();
+    let wrapper_types: Vec<String> = wraps
+        .wrappers
+        .iter()
+        .map(|w| wrapper_type_name(w.wrapper_type))
+        .collect();
 
     json!({
         "format_version_major": fh.format_version_major,
@@ -65,18 +68,34 @@ fn inspect_container(container: &[u8]) -> Value {
     })
 }
 
-fn write_vector(case_id: &str, container: &[u8], plaintext: &[u8], key_material: Value, expected: Value) {
+fn write_vector(
+    case_id: &str,
+    container: &[u8],
+    plaintext: &[u8],
+    key_material: Value,
+    expected: Value,
+) {
     let dir = vectors_dir().join(case_id);
     fs::create_dir_all(&dir).expect("create vector dir");
 
     fs::write(dir.join("container.hlock"), container).expect("write container.hlock");
     fs::write(dir.join("plaintext.bin"), plaintext).expect("write plaintext.bin");
-    fs::write(dir.join("key_material.json"), serde_json::to_string_pretty(&key_material).unwrap())
-        .expect("write key_material.json");
-    fs::write(dir.join("expected.json"), serde_json::to_string_pretty(&expected).unwrap())
-        .expect("write expected.json");
+    fs::write(
+        dir.join("key_material.json"),
+        serde_json::to_string_pretty(&key_material).unwrap(),
+    )
+    .expect("write key_material.json");
+    fs::write(
+        dir.join("expected.json"),
+        serde_json::to_string_pretty(&expected).unwrap(),
+    )
+    .expect("write expected.json");
 
-    println!("  generated {case_id}: {} bytes container, {} bytes plaintext", container.len(), plaintext.len());
+    println!(
+        "  generated {case_id}: {} bytes container, {} bytes plaintext",
+        container.len(),
+        plaintext.len()
+    );
 }
 
 fn gen_diff_pass_001() {
@@ -102,9 +121,15 @@ fn gen_diff_pass_001() {
     let mut rng = StdRng::seed_from_u64(0xD1FF_0001_0000_0001);
     let container = encrypt(&input, &wrappers, &mut rng).expect("encrypt DIFF-PASS-001");
 
-    let result = decrypt(&container, &OpenKeyMaterial::Passphrase(passphrase.to_vec()))
-        .expect("decrypt DIFF-PASS-001 during generation");
-    assert_eq!(result.plaintext, plaintext, "decrypt roundtrip sanity check");
+    let result = decrypt(
+        &container,
+        &OpenKeyMaterial::Passphrase(passphrase.to_vec()),
+    )
+    .expect("decrypt DIFF-PASS-001 during generation");
+    assert_eq!(
+        result.plaintext, plaintext,
+        "decrypt roundtrip sanity check"
+    );
 
     let inspect = inspect_container(&container);
 
@@ -132,10 +157,9 @@ fn gen_diff_x25519_001() {
     let plaintext = b"hydralock differential test vector -- x25519 mode";
 
     let sk_bytes: [u8; 32] = [
-        0xaa, 0x11, 0x22, 0x33, 0xaa, 0x11, 0x22, 0x33,
-        0xaa, 0x11, 0x22, 0x33, 0xaa, 0x11, 0x22, 0x33,
-        0xaa, 0x11, 0x22, 0x33, 0xaa, 0x11, 0x22, 0x33,
-        0xaa, 0x11, 0x22, 0x33, 0xaa, 0x11, 0x22, 0x33,
+        0xaa, 0x11, 0x22, 0x33, 0xaa, 0x11, 0x22, 0x33, 0xaa, 0x11, 0x22, 0x33, 0xaa, 0x11, 0x22,
+        0x33, 0xaa, 0x11, 0x22, 0x33, 0xaa, 0x11, 0x22, 0x33, 0xaa, 0x11, 0x22, 0x33, 0xaa, 0x11,
+        0x22, 0x33,
     ];
     let pk_bytes: [u8; 32] = *PublicKey::from(&StaticSecret::from(sk_bytes)).as_bytes();
 
@@ -158,7 +182,10 @@ fn gen_diff_x25519_001() {
 
     let result = decrypt(&container, &OpenKeyMaterial::X25519SecretKey(sk_bytes))
         .expect("decrypt DIFF-X25519-001 during generation");
-    assert_eq!(result.plaintext, plaintext, "decrypt roundtrip sanity check");
+    assert_eq!(
+        result.plaintext, plaintext,
+        "decrypt roundtrip sanity check"
+    );
 
     let inspect = inspect_container(&container);
 
@@ -187,10 +214,9 @@ fn gen_diff_mlkem_001() {
     let plaintext = b"hydralock differential test vector -- ml-kem-768+x25519 mode";
 
     let x25519_sk_bytes: [u8; 32] = [
-        0xbb, 0x22, 0x33, 0x44, 0xbb, 0x22, 0x33, 0x44,
-        0xbb, 0x22, 0x33, 0x44, 0xbb, 0x22, 0x33, 0x44,
-        0xbb, 0x22, 0x33, 0x44, 0xbb, 0x22, 0x33, 0x44,
-        0xbb, 0x22, 0x33, 0x44, 0xbb, 0x22, 0x33, 0x44,
+        0xbb, 0x22, 0x33, 0x44, 0xbb, 0x22, 0x33, 0x44, 0xbb, 0x22, 0x33, 0x44, 0xbb, 0x22, 0x33,
+        0x44, 0xbb, 0x22, 0x33, 0x44, 0xbb, 0x22, 0x33, 0x44, 0xbb, 0x22, 0x33, 0x44, 0xbb, 0x22,
+        0x33, 0x44,
     ];
     let mlkem_seed: [u8; MLKEM768_SEED_LEN] = {
         let mut s = [0u8; MLKEM768_SEED_LEN];
@@ -206,7 +232,7 @@ fn gen_diff_mlkem_001() {
     let pk_mlkem_ek = pk.mlkem768_ek_bytes;
 
     let wrappers = [WrapperSpec::MlKem768X25519 {
-        recipient_pk: pk,
+        recipient_pk: Box::new(pk),
         wrapper_id: b"mlkem".to_vec(),
     }];
     let input = EncryptInput {
@@ -225,7 +251,10 @@ fn gen_diff_mlkem_001() {
     let sk2 = MlKem768X25519RecipientSecretKey::new(x25519_sk_bytes, mlkem_seed);
     let result = decrypt(&container, &OpenKeyMaterial::MlKem768X25519SecretKey(sk2))
         .expect("decrypt DIFF-MLKEM-001 during generation");
-    assert_eq!(result.plaintext, plaintext, "decrypt roundtrip sanity check");
+    assert_eq!(
+        result.plaintext, plaintext,
+        "decrypt roundtrip sanity check"
+    );
 
     let inspect = inspect_container(&container);
 

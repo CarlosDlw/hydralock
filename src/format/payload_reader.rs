@@ -1,14 +1,14 @@
-/// Streamable payload reader for decrypting chunks produced by PayloadWriter.
-///
-/// State machine:
-/// - epoch_index / chunk_index_in_epoch advance automatically after each chunk.
-/// - Reorder and splice are detected implicitly: if a chunk was encrypted with
-///   different (epoch, chunk) indices, the AEAD tag will fail verification.
-/// - Truncation is detected by checking is_final on the last provided chunk;
-///   reading additional chunks after is_final is an error.
+//! Streamable payload reader for decrypting chunks produced by PayloadWriter.
+//!
+//! State machine:
+//! - epoch_index / chunk_index_in_epoch advance automatically after each chunk.
+//! - Reorder and splice are detected implicitly: if a chunk was encrypted with
+//!   different (epoch, chunk) indices, the AEAD tag will fail verification.
+//! - Truncation is detected by checking is_final on the last provided chunk;
+//!   reading additional chunks after is_final is an error.
 
 use crate::crypto::kdf::{derive_chunk_key, derive_chunk_nonce, derive_epoch_key};
-use crate::crypto::payload_crypto::{decrypt_chunk, PayloadCryptoError};
+use crate::crypto::payload_crypto::{PayloadCryptoError, decrypt_chunk};
 use crate::crypto::secret::SecretKey32;
 
 /// Size of the Poly1305 authentication tag in bytes.
@@ -48,7 +48,6 @@ pub struct PayloadReader {
     k_payload_master: SecretKey32,
     file_uuid: [u8; 16],
     suite_id: u16,
-    header_hash: [u8; 32],
 
     // Configuration
     epoch_size: u32,
@@ -68,20 +67,17 @@ impl PayloadReader {
     /// - `k_payload_master`: root payload key from the KDF tree.
     /// - `file_uuid`: bound to AAD; prevents cross-file splice.
     /// - `suite_id`: bound to AAD; prevents cross-suite downgrade.
-    /// - `header_hash`: bound to AAD; binds decryption to a specific container.
     /// - `epoch_size`: max chunks per epoch (must match writer epoch_size).
     pub fn new(
         k_payload_master: SecretKey32,
         file_uuid: [u8; 16],
         suite_id: u16,
-        header_hash: [u8; 32],
         epoch_size: u32,
     ) -> Self {
         PayloadReader {
             k_payload_master,
             file_uuid,
             suite_id,
-            header_hash,
             epoch_size,
             epoch_index: 0,
             chunk_index_in_epoch: 0,
@@ -133,7 +129,6 @@ impl PayloadReader {
             ciphertext_with_tag,
             &self.file_uuid,
             self.suite_id,
-            &self.header_hash,
             epoch,
             chunk,
             plaintext_chunk_len,
@@ -201,16 +196,11 @@ mod tests {
         [0x11u8; 16]
     }
 
-    fn test_header_hash() -> [u8; 32] {
-        [0x22u8; 32]
-    }
-
     fn make_writer(chunk_size: u32, epoch_size: u32, data: &[u8]) -> Vec<EncryptedChunkEntry> {
         let mut writer = PayloadWriter::new(
             test_key(),
             test_uuid(),
             0x01,
-            test_header_hash(),
             chunk_size,
             epoch_size,
             data.len() as u64,
@@ -221,7 +211,7 @@ mod tests {
     }
 
     fn make_reader(epoch_size: u32) -> PayloadReader {
-        PayloadReader::new(test_key(), test_uuid(), 0x01, test_header_hash(), epoch_size)
+        PayloadReader::new(test_key(), test_uuid(), 0x01, epoch_size)
     }
 
     fn decrypt_all(

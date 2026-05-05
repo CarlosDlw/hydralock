@@ -15,9 +15,9 @@ use crate::wrapper::mlkem768_x25519::{
     MLKEM768_X25519_STANZA_LEN, MlKem768X25519Stanza, WRAPPER_TYPE_MLKEM768_X25519,
 };
 use crate::wrapper::passargon2id::{
-    PassArgon2idStanza, PASS_ARGON2ID_STANZA_LEN, WRAPPER_TYPE_PASS_ARGON2ID,
+    PASS_ARGON2ID_STANZA_LEN, PassArgon2idStanza, WRAPPER_TYPE_PASS_ARGON2ID,
 };
-use crate::wrapper::x25519::{X25519Stanza, WRAPPER_TYPE_X25519, X25519_STANZA_LEN};
+use crate::wrapper::x25519::{WRAPPER_TYPE_X25519, X25519_STANZA_LEN, X25519Stanza};
 
 pub fn run(args: RewrapArgs) -> anyhow::Result<()> {
     if !args.old_passphrase && args.old_key.is_none() {
@@ -69,8 +69,14 @@ pub fn run(args: RewrapArgs) -> anyhow::Result<()> {
             .map_err(|e| anyhow::anyhow!("failed to load old key '{}': {e}", path.display()))?
     };
 
-    let fmk = try_unwrap_fmk(&wraps.wrappers, &old_key, suite_id, &header_hash, &file_uuid)
-        .map_err(|e| anyhow::anyhow!("FMK recovery failed: {e}"))?;
+    let fmk = try_unwrap_fmk(
+        &wraps.wrappers,
+        &old_key,
+        suite_id,
+        &header_hash,
+        &file_uuid,
+    )
+    .map_err(|e| anyhow::anyhow!("FMK recovery failed: {e}"))?;
 
     // Build entry size list for computing the new header hash.
     let mut new_entry_sizes: Vec<(usize, usize)> = Vec::new();
@@ -124,7 +130,13 @@ pub fn run(args: RewrapArgs) -> anyhow::Result<()> {
             Argon2Profile::Balanced => (262144, 3, 1),
             Argon2Profile::Paranoid => (1048576, 3, 1),
         };
-        let params = Argon2Params { version: 19, memory_kib: m, time_cost: t, parallelism: p, salt: [0u8; 32] };
+        let params = Argon2Params {
+            version: 19,
+            memory_kib: m,
+            time_cost: t,
+            parallelism: p,
+            salt: [0u8; 32],
+        };
         let aad = WrapperAadInput {
             suite_id,
             wrapper_index: entry_idx as u16,
@@ -132,8 +144,9 @@ pub fn run(args: RewrapArgs) -> anyhow::Result<()> {
             header_hash: new_header_hash,
         }
         .encode();
-        let stanza = PassArgon2idStanza::seal_with_rng(&fmk_as_key, params, &passphrase, &aad, &mut rng)
-            .map_err(|e| anyhow::anyhow!("passphrase seal failed: {e:?}"))?;
+        let stanza =
+            PassArgon2idStanza::seal_with_rng(&fmk_as_key, params, &passphrase, &aad, &mut rng)
+                .map_err(|e| anyhow::anyhow!("passphrase seal failed: {e:?}"))?;
         new_wrappers.push(WrapperEntry {
             wrapper_type: WRAPPER_TYPE_PASS_ARGON2ID,
             wrapper_flags: 0,

@@ -139,7 +139,6 @@ def decrypt(container: bytes, key_material) -> DecryptResult:
             chunk_idx_in_epoch,
             pt_chunk_len,
             is_final,
-            header_hash,
         )
         cipher = _ChaCha20Poly1305.new(key=k_chunk, nonce=n_chunk)
         cipher.update(aad)

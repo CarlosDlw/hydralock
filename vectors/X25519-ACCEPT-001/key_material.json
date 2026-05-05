@@ -1,0 +1,6 @@
+{
+  "recipient_pk_hex": "14ca9e4d387bccf35746e0407daaacc6b28a4f8445ef5a5158894db983e24070",
+  "recipient_sk_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "wrapper_id_label": "x25519",
+  "wrapper_type": "X25519"
+}

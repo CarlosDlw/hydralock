@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rand::rngs::OsRng;
@@ -17,7 +17,10 @@ pub fn run(mut args: EncryptArgs) -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("failed to read input '{}': {e}", args.input.display()))?;
 
     let logical_name = args.name.take().or_else(|| {
-        args.input.file_name().and_then(|n| n.to_str()).map(|s| s.to_string())
+        args.input
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(|s| s.to_string())
     });
 
     let created_at = SystemTime::now()
@@ -74,8 +77,9 @@ fn build_wrappers(args: &EncryptArgs) -> anyhow::Result<Vec<WrapperSpec>> {
     }
 
     if let Some(ref path) = args.recipient {
-        let pk = load_x25519_public(path)
-            .map_err(|e| anyhow::anyhow!("failed to load recipient key '{}': {e}", path.display()))?;
+        let pk = load_x25519_public(path).map_err(|e| {
+            anyhow::anyhow!("failed to load recipient key '{}': {e}", path.display())
+        })?;
         wrappers.push(WrapperSpec::X25519 {
             recipient_pk: pk,
             wrapper_id: format!("rcpt{idx}").into_bytes(),
@@ -84,10 +88,11 @@ fn build_wrappers(args: &EncryptArgs) -> anyhow::Result<Vec<WrapperSpec>> {
     }
 
     if let Some(ref path) = args.recipient_pq {
-        let pk = load_mlkem_public(path)
-            .map_err(|e| anyhow::anyhow!("failed to load PQ recipient key '{}': {e}", path.display()))?;
+        let pk = load_mlkem_public(path).map_err(|e| {
+            anyhow::anyhow!("failed to load PQ recipient key '{}': {e}", path.display())
+        })?;
         wrappers.push(WrapperSpec::MlKem768X25519 {
-            recipient_pk: pk,
+            recipient_pk: Box::new(pk),
             wrapper_id: format!("rcpt{idx}").into_bytes(),
         });
         let _ = idx;
@@ -96,7 +101,7 @@ fn build_wrappers(args: &EncryptArgs) -> anyhow::Result<Vec<WrapperSpec>> {
     Ok(wrappers)
 }
 
-fn check_output(path: &PathBuf, force: bool) -> anyhow::Result<()> {
+fn check_output(path: &Path, force: bool) -> anyhow::Result<()> {
     if path.exists() && !force {
         anyhow::bail!(
             "output file '{}' already exists — use --force to overwrite",
@@ -111,7 +116,6 @@ fn write_output(path: &PathBuf, data: &[u8]) -> anyhow::Result<()> {
     let tmp = path.with_extension("tmp");
     std::fs::write(&tmp, data)
         .map_err(|e| anyhow::anyhow!("failed to write temp file '{}': {e}", tmp.display()))?;
-    std::fs::rename(&tmp, path)
-        .map_err(|e| anyhow::anyhow!("failed to rename temp file: {e}"))?;
+    std::fs::rename(&tmp, path).map_err(|e| anyhow::anyhow!("failed to rename temp file: {e}"))?;
     Ok(())
 }

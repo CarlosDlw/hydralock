@@ -1,0 +1,10 @@
+{
+  "case_id": "DOWNGRADE-001",
+  "error": {
+    "code": "UnsupportedSuiteId"
+  },
+  "expect": "reject",
+  "notes": "suite_id field (bytes 8-9) changed from 0x0001 to 0x0002; also corrupts validate_layout payload_offset check",
+  "operation": "decrypt",
+  "version": "1"
+}

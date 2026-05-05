@@ -1,0 +1,23 @@
+{
+  "case_id": "MLKEM-ACCEPT-001",
+  "inspect": {
+    "format_version_major": 1,
+    "format_version_minor": 0,
+    "header_hash": "58f8deb9a1f4c9804a1b503122535f400f8a5e3d0fccdcd9afb3467a87266eb4",
+    "suite_id": 1,
+    "threshold": 1,
+    "total_container_bytes": 1556,
+    "total_shares": 1,
+    "wrapper_count": 1,
+    "wrapper_types": [
+      "MLKEM768-X25519"
+    ]
+  },
+  "logical_name": "mlkem-test.bin",
+  "plaintext_hex": "68796472616c6f636b206d6c6b656d2d3736382b78323535313920616363657074616e6365207465737420766563746f72",
+  "verify": {
+    "result": "valid"
+  },
+  "version": "1",
+  "wrapper_type": "MlKem768X25519"
+}

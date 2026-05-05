@@ -47,7 +47,7 @@ pub fn run() -> anyhow::Result<()> {
     // ── Vector 2: X25519 ─────────────────────────────────────────────────
     {
         let plaintext = b"hydralock test vector 2 -- x25519".to_vec();
-        let sk = x25519_dalek::StaticSecret::random_from_rng(&mut rng);
+        let sk = x25519_dalek::StaticSecret::random_from_rng(rng);
         let pk: [u8; 32] = x25519_dalek::PublicKey::from(&sk).to_bytes();
         let sk_bytes: [u8; 32] = sk.to_bytes();
 
@@ -86,7 +86,7 @@ pub fn run() -> anyhow::Result<()> {
         let pk = sk.public_key();
 
         let wrappers = vec![WrapperSpec::MlKem768X25519 {
-            recipient_pk: pk,
+            recipient_pk: Box::new(pk),
             wrapper_id: b"tv3".to_vec(),
         }];
 

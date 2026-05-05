@@ -1,36 +1,36 @@
-/// ML-KEM-768 + X25519 hybrid recipient wrapper for HydraLock v1.
-///
-/// Security rationale:
-///   If X25519 is broken by a quantum adversary, ML-KEM-768 still protects the key.
-///   If ML-KEM-768 has a classical flaw, X25519 still provides classical security.
-///   Both shared secrets must be compromised simultaneously to break the hybrid.
-///
-/// Algorithm:
-///   Sender side (seal):
-///     1. Generate ephemeral X25519 keypair (eph_sk, eph_pk).
-///     2. Compute ss_x25519 = X25519(eph_sk, recipient_x25519_pk).
-///     3. Encapsulate using ML-KEM-768: (ct_mlkem, ss_mlkem) = MLKEM768.Encaps(recipient_ek).
-///     4. Derive KEK = HKDF-SHA-512(
-///            ikm  = ss_x25519 (32B) || ss_mlkem (32B),
-///            salt = eph_x25519_pk (32B) || recipient_x25519_pk (32B),
-///            info = "hydralock:v1:mlkem768-x25519-kek",
-///        ) → 32 bytes.
-///     5. Wrap key with AES-256-GCM-SIV: (wrap_nonce, wrapped_key).
-///
-///   Recipient side (open):
-///     1. Compute ss_x25519 = X25519(recipient_x25519_sk, eph_pk).
-///     2. Decapsulate: ss_mlkem = MLKEM768.Decaps(recipient_dk, ct_mlkem).
-///     3. Re-derive KEK (same HKDF).
-///     4. Unwrap key with AES-256-GCM-SIV.
-///
-/// Wire format (1182 bytes):
-///   Offset   Size    Field
-///   0        2       stanza_version (u16 = 1, big-endian)
-///   2        32      eph_x25519_pk
-///   34       1088    mlkem768_ct
-///   1122     12      wrap_nonce
-///   1134     48      wrapped_key (32B ciphertext + 16B AES-GCM-SIV tag)
-///   Total: 1182 bytes
+//! ML-KEM-768 + X25519 hybrid recipient wrapper for HydraLock v1.
+//!
+//! Security rationale:
+//!   If X25519 is broken by a quantum adversary, ML-KEM-768 still protects the key.
+//!   If ML-KEM-768 has a classical flaw, X25519 still provides classical security.
+//!   Both shared secrets must be compromised simultaneously to break the hybrid.
+//!
+//! Algorithm:
+//!   Sender side (seal):
+//!     1. Generate ephemeral X25519 keypair (eph_sk, eph_pk).
+//!     2. Compute ss_x25519 = X25519(eph_sk, recipient_x25519_pk).
+//!     3. Encapsulate using ML-KEM-768: (ct_mlkem, ss_mlkem) = MLKEM768.Encaps(recipient_ek).
+//!     4. Derive KEK = HKDF-SHA-512(
+//!            ikm  = ss_x25519 (32B) || ss_mlkem (32B),
+//!            salt = eph_x25519_pk (32B) || recipient_x25519_pk (32B),
+//!            info = "hydralock:v1:mlkem768-x25519-kek",
+//!        ) → 32 bytes.
+//!     5. Wrap key with AES-256-GCM-SIV: (wrap_nonce, wrapped_key).
+//!
+//!   Recipient side (open):
+//!     1. Compute ss_x25519 = X25519(recipient_x25519_sk, eph_pk).
+//!     2. Decapsulate: ss_mlkem = MLKEM768.Decaps(recipient_dk, ct_mlkem).
+//!     3. Re-derive KEK (same HKDF).
+//!     4. Unwrap key with AES-256-GCM-SIV.
+//!
+//! Wire format (1182 bytes):
+//!   Offset   Size    Field
+//!   0        2       stanza_version (u16 = 1, big-endian)
+//!   2        32      eph_x25519_pk
+//!   34       1088    mlkem768_ct
+//!   1122     12      wrap_nonce
+//!   1134     48      wrapped_key (32B ciphertext + 16B AES-GCM-SIV tag)
+//!   Total: 1182 bytes
 
 use hkdf::Hkdf;
 use rand::RngCore;
@@ -39,13 +39,15 @@ use x25519_dalek::{PublicKey, StaticSecret};
 use zeroize::Zeroizing;
 
 use ml_kem::{
-    B32, Ciphertext, DecapsulationKey768, EncapsulationKey768, MlKem768,
-    Decapsulate, KeyExport, KeyInit, TryKeyInit,
+    B32, Ciphertext, Decapsulate, DecapsulationKey768, EncapsulationKey768, KeyExport, KeyInit,
+    MlKem768, TryKeyInit,
 };
 
 use crate::crypto::password::Kek;
 use crate::crypto::secret::SecretKey32;
-use crate::crypto::wrap::{unwrap_key, wrap_key, WrapError, AES_GCM_SIV_NONCE_LEN, WRAPPED_KEY_LEN};
+use crate::crypto::wrap::{
+    AES_GCM_SIV_NONCE_LEN, WRAPPED_KEY_LEN, WrapError, unwrap_key, wrap_key,
+};
 
 /// Stanza type identifier for the ML-KEM-768 + X25519 hybrid wrapper.
 pub const WRAPPER_TYPE_MLKEM768_X25519: u16 = 0x0003;
@@ -108,10 +110,16 @@ impl core::fmt::Display for MlKem768X25519Error {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::InvalidLength { expected, actual } => {
-                write!(f, "invalid stanza length: expected {expected}, got {actual}")
+                write!(
+                    f,
+                    "invalid stanza length: expected {expected}, got {actual}"
+                )
             }
             Self::UnsupportedStanzaVersion { expected, actual } => {
-                write!(f, "unsupported stanza version: expected {expected}, got {actual}")
+                write!(
+                    f,
+                    "unsupported stanza version: expected {expected}, got {actual}"
+                )
             }
             Self::InvalidRecipientKey => write!(f, "invalid ML-KEM-768 encapsulation key"),
             Self::WrapFailed => write!(f, "key wrapping failed"),
@@ -152,7 +160,10 @@ impl MlKem768X25519RecipientPublicKey {
         let mut mlkem768_ek_bytes = [0u8; MLKEM768_EK_LEN];
         x25519_pk.copy_from_slice(&bytes[..32]);
         mlkem768_ek_bytes.copy_from_slice(&bytes[32..]);
-        Self { x25519_pk, mlkem768_ek_bytes }
+        Self {
+            x25519_pk,
+            mlkem768_ek_bytes,
+        }
     }
 }
 
@@ -182,7 +193,10 @@ impl MlKem768X25519RecipientSecretKey {
         let mut mlkem768_dk_seed = Zeroizing::new([0u8; MLKEM768_SEED_LEN]);
         rng.fill_bytes(x25519_sk.as_mut());
         rng.fill_bytes(mlkem768_dk_seed.as_mut());
-        Self { x25519_sk, mlkem768_dk_seed }
+        Self {
+            x25519_sk,
+            mlkem768_dk_seed,
+        }
     }
 
     /// Derive the corresponding public key.
@@ -193,7 +207,10 @@ impl MlKem768X25519RecipientSecretKey {
         let ek_arr = ek.to_bytes();
         let mut mlkem768_ek_bytes = [0u8; MLKEM768_EK_LEN];
         mlkem768_ek_bytes.copy_from_slice(ek_arr.as_slice());
-        MlKem768X25519RecipientPublicKey { x25519_pk, mlkem768_ek_bytes }
+        MlKem768X25519RecipientPublicKey {
+            x25519_pk,
+            mlkem768_ek_bytes,
+        }
     }
 }
 
@@ -231,26 +248,30 @@ impl MlKem768X25519Stanza {
         eph_x25519_pk.copy_from_slice(&bytes[EPH_X25519_PK_OFFSET..EPH_X25519_PK_OFFSET + 32]);
 
         let mut mlkem768_ct = [0u8; MLKEM768_CT_LEN];
-        mlkem768_ct.copy_from_slice(&bytes[MLKEM768_CT_OFFSET..MLKEM768_CT_OFFSET + MLKEM768_CT_LEN]);
+        mlkem768_ct
+            .copy_from_slice(&bytes[MLKEM768_CT_OFFSET..MLKEM768_CT_OFFSET + MLKEM768_CT_LEN]);
 
         let mut wrap_nonce = [0u8; AES_GCM_SIV_NONCE_LEN];
         wrap_nonce
             .copy_from_slice(&bytes[WRAP_NONCE_OFFSET..WRAP_NONCE_OFFSET + AES_GCM_SIV_NONCE_LEN]);
 
         let mut wrapped_key = [0u8; WRAPPED_KEY_BODY_LEN];
-        wrapped_key.copy_from_slice(
-            &bytes[WRAPPED_KEY_OFFSET..WRAPPED_KEY_OFFSET + WRAPPED_KEY_BODY_LEN],
-        );
+        wrapped_key
+            .copy_from_slice(&bytes[WRAPPED_KEY_OFFSET..WRAPPED_KEY_OFFSET + WRAPPED_KEY_BODY_LEN]);
 
-        Ok(Self { eph_x25519_pk, mlkem768_ct, wrap_nonce, wrapped_key })
+        Ok(Self {
+            eph_x25519_pk,
+            mlkem768_ct,
+            wrap_nonce,
+            wrapped_key,
+        })
     }
 
     /// Encode this stanza into its canonical 1182-byte binary representation.
     pub fn encode(&self) -> [u8; MLKEM768_X25519_STANZA_LEN] {
         let mut out = [0u8; MLKEM768_X25519_STANZA_LEN];
         out[0..2].copy_from_slice(&STANZA_VERSION.to_be_bytes());
-        out[EPH_X25519_PK_OFFSET..EPH_X25519_PK_OFFSET + 32]
-            .copy_from_slice(&self.eph_x25519_pk);
+        out[EPH_X25519_PK_OFFSET..EPH_X25519_PK_OFFSET + 32].copy_from_slice(&self.eph_x25519_pk);
         out[MLKEM768_CT_OFFSET..MLKEM768_CT_OFFSET + MLKEM768_CT_LEN]
             .copy_from_slice(&self.mlkem768_ct);
         out[WRAP_NONCE_OFFSET..WRAP_NONCE_OFFSET + AES_GCM_SIV_NONCE_LEN]
@@ -327,7 +348,14 @@ impl MlKem768X25519Stanza {
         rng.fill_bytes(eph_x25519_sk_bytes.as_mut());
         rng.fill_bytes(&mut mlkem_encap_rand);
         rng.fill_bytes(&mut wrap_nonce);
-        Self::seal(key, recipient_pk, &eph_x25519_sk_bytes, &mlkem_encap_rand, wrap_nonce, aad)
+        Self::seal(
+            key,
+            recipient_pk,
+            &eph_x25519_sk_bytes,
+            &mlkem_encap_rand,
+            wrap_nonce,
+            aad,
+        )
     }
 
     /// Open (unwrap) the sealed key using the recipient's secret key.
@@ -499,10 +527,8 @@ mod tests {
     #[test]
     fn wrong_x25519_key_fails_open() {
         let stanza = test_stanza();
-        let wrong_sk = MlKem768X25519RecipientSecretKey::new(
-            [0xFFu8; 32],
-            *test_sk_a().mlkem768_dk_seed,
-        );
+        let wrong_sk =
+            MlKem768X25519RecipientSecretKey::new([0xFFu8; 32], *test_sk_a().mlkem768_dk_seed);
         let err = stanza.open(&wrong_sk, &test_aad());
         assert!(matches!(err, Err(MlKem768X25519Error::UnwrapFailed)));
     }
@@ -552,7 +578,9 @@ mod tests {
 
         let encoded = stanza.encode();
         let decoded = MlKem768X25519Stanza::parse(&encoded).expect("parse failed");
-        let recovered = decoded.open(&test_sk_a(), &test_aad()).expect("open failed");
+        let recovered = decoded
+            .open(&test_sk_a(), &test_aad())
+            .expect("open failed");
         assert_eq!(recovered.expose(), test_key().expose());
     }
 
@@ -575,7 +603,10 @@ mod tests {
         let err = MlKem768X25519Stanza::parse(&bytes);
         assert!(matches!(
             err,
-            Err(MlKem768X25519Error::UnsupportedStanzaVersion { expected: 1, actual: 9 })
+            Err(MlKem768X25519Error::UnsupportedStanzaVersion {
+                expected: 1,
+                actual: 9
+            })
         ));
     }
 

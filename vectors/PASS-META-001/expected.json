@@ -1,0 +1,25 @@
+{
+  "case_id": "PASS-META-001",
+  "created_at": 1700000000,
+  "inspect": {
+    "format_version_major": 1,
+    "format_version_minor": 0,
+    "header_hash": "0bfbdbf5e24786ac11660685284a8c022fa978e4dbfd904c8652b3e431fb2084",
+    "suite_id": 1,
+    "threshold": 1,
+    "total_container_bytes": 505,
+    "total_shares": 1,
+    "wrapper_count": 1,
+    "wrapper_types": [
+      "PASS-ARGON2ID"
+    ]
+  },
+  "logical_name": "μεταδεδομένα.bin",
+  "mime_type": "application/octet-stream",
+  "plaintext_hex": "6d65746164617461207574662d382074657374207061796c6f6164",
+  "verify": {
+    "result": "valid"
+  },
+  "version": "1",
+  "wrapper_type": "PassArgon2id"
+}

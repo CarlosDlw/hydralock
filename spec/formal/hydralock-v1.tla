@@ -166,8 +166,9 @@ WrapperBinding(aads) ==
 
 (*
   Integrity chain:
-    1. Each chunk is authenticated by XChaCha20-Poly1305 AEAD with AAD
-       binding (epoch_index, chunk_index, file_uuid, suite_id, header_hash).
+     1. Each chunk is authenticated by XChaCha20-Poly1305 AEAD with AAD
+       binding (epoch_index, chunk_index, file_uuid, suite_id,
+       plaintext_chunk_len, is_final).
     2. Manifest root = BLAKE3_keyed(k_manifest, chunk_hash[0] || ... || chunk_hash[n-1])
        where chunk_hash[i] = BLAKE3(ciphertext_with_tag[i]).
     3. Footer auth_tag = BLAKE3_keyed(k_manifest, pre_footer_bytes)

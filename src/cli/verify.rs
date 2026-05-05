@@ -62,8 +62,7 @@ pub fn run(args: VerifyArgs) -> anyhow::Result<()> {
     };
 
     // Decrypt the container (which also verifies the footer auth tag internally).
-    decrypt(&data, &key_material)
-        .map_err(|e| anyhow::anyhow!("verification failed: {e}"))?;
+    decrypt(&data, &key_material).map_err(|e| anyhow::anyhow!("verification failed: {e}"))?;
 
     eprintln!("footer auth tag OK");
     Ok(())

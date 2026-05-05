@@ -126,10 +126,10 @@ The `file_uuid` (16-byte random value, stored as the first 16 bytes of every `wr
 
 1. **Generate secrets** — random FMK (32 bytes) and file UUID (16 bytes) from OS CSPRNG.
 2. **Derive key tree** — HKDF-SHA-512 → root key → BLAKE3 subkeys.
-3. **Compute header hash** — encode the fixed header (with correct section lengths but placeholder manifest root) and hash it with BLAKE3. This binds wrapper AADs to the specific container layout.
-4. **Encrypt payload** — split plaintext into `chunk_size`-byte blocks (default 64 KiB). For every `epoch_size` chunks (default 256), derive a new epoch key. Encrypt each chunk with XChaCha20-Poly1305 under its unique `(k_epoch, nonce)` pair. AAD per chunk: `file_uuid || suite_id || header_hash || epoch_index || chunk_index || is_final_flag`.
+3. **Compute header hash** — encode the fixed header (with correct section lengths) and hash it with BLAKE3. This binds wrapper and metadata AADs to the specific container layout.
+4. **Encrypt payload** — split plaintext into `chunk_size`-byte blocks (default 64 KiB). For every `epoch_size` chunks (default 256), derive a new epoch key. Encrypt each chunk with XChaCha20-Poly1305 under its unique `(k_epoch, nonce)` pair. AAD per chunk: `magic || version || suite_id || file_uuid || epoch_index || chunk_index || plaintext_chunk_len || is_final_flag`. The payload AAD intentionally excludes `header_hash` so rewrap can preserve payload ciphertexts verbatim.
 5. **Build manifest** — compute `manifest_root = BLAKE3_keyed(k_manifest, ct[0] || ct[1] || ... || ct[n])` using an incremental keyed hasher over all chunk ciphertexts (including Poly1305 tags).
-6. **Encrypt metadata** — serialize metadata as CBOR, then encrypt with AES-256-GCM-SIV under `k_control`. AAD: `file_uuid || suite_id || header_hash`.
+6. **Encrypt metadata** — serialize metadata as CBOR, then encrypt with AES-256-GCM-SIV under `k_control`. Store the result as `nonce (12B) || ciphertext+tag`. AAD: `magic || version || suite_id || section_type=0x04 || file_uuid || header_hash`.
 7. **Seal FMK into wrappers** — for each recipient, seal the FMK using the appropriate KEM (see §3.4). Each stanza AAD includes: `suite_id || wrapper_index || file_uuid || header_hash`.
 8. **Assemble container** — concatenate all sections, then compute the footer auth tag: `BLAKE3_keyed(k_manifest, pre_footer_bytes)`.
 
@@ -180,7 +180,7 @@ Rewrap replaces the Wraps section (and recomputes the Policy and Fixed Header) w
 
 **Cost**: O(number of new recipients) — independent of payload size.
 
-**Security invariant**: The new wrapper stanzas are sealed with the correct `header_hash` for the rewrapped container (computed before sealing via `compute_rewrap_header_hash`), so AAD validation is preserved. The FMK and file UUID are not changed, meaning the payload key tree is identical.
+**Security invariant**: The new wrapper stanzas and metadata are authenticated with the correct `header_hash` for the rewrapped container (computed before sealing via `compute_rewrap_header_hash`), and the footer MAC is recomputed over the new pre-footer bytes. The FMK and file UUID are not changed, meaning the payload key tree is identical and the payload ciphertexts remain valid without re-encryption.
 
 ---
 
@@ -202,7 +202,7 @@ All multi-byte integers are **big-endian**. The container is fail-closed: any pa
 | 14 | 4 | `u32` | `header_len` | Always 70 in v1 |
 | 18 | 4 | `u32` | `policy_len` | Size of Policy section |
 | 22 | 4 | `u32` | `wraps_len` | Size of Wraps section |
-| 26 | 4 | `u32` | `metadata_len` | Size of encrypted Metadata section |
+| 26 | 4 | `u32` | `metadata_len` | Size of encrypted metadata bytes (`nonce || ciphertext+tag`) |
 | 30 | 8 | `u64` | `payload_offset` | Byte offset of Payload section from file start |
 | 38 | 32 | `[u8;32]` | `reserved` | Must be all-zero |
 
@@ -253,7 +253,7 @@ The first 16 bytes of every `wrapper_id` are the `file_uuid`. This allows decryp
 
 ### 4.4 Metadata Section
 
-Encrypted CBOR blob under AES-256-GCM-SIV.
+Encrypted CBOR blob under AES-256-GCM-SIV. There is no standalone metadata header in the v1 wire format.
 
 **Wire layout**: `nonce (12B) || ciphertext+tag`
 

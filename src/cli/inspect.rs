@@ -2,10 +2,10 @@ use crate::cli::args::InspectArgs;
 use crate::format::header::{FIXED_HEADER_LEN, FixedHeader};
 use crate::format::policy::PolicySection;
 use crate::format::wraps::WrapsSection;
-use crate::wrapper::passargon2id::WRAPPER_TYPE_PASS_ARGON2ID;
-use crate::wrapper::x25519::WRAPPER_TYPE_X25519;
 use crate::wrapper::mlkem768_x25519::WRAPPER_TYPE_MLKEM768_X25519;
+use crate::wrapper::passargon2id::WRAPPER_TYPE_PASS_ARGON2ID;
 use crate::wrapper::threshold::WRAPPER_TYPE_THRESHOLD;
+use crate::wrapper::x25519::WRAPPER_TYPE_X25519;
 
 pub fn run(args: InspectArgs) -> anyhow::Result<()> {
     let data = std::fs::read(&args.input)
@@ -35,7 +35,10 @@ pub fn run(args: InspectArgs) -> anyhow::Result<()> {
     let header_hash: [u8; 32] = *blake3::hash(&data[..FIXED_HEADER_LEN]).as_bytes();
 
     println!("HydraLock Container");
-    println!("  format version : {}.{}", fh.format_version_major, fh.format_version_minor);
+    println!(
+        "  format version : {}.{}",
+        fh.format_version_major, fh.format_version_minor
+    );
     println!("  suite id       : 0x{:04x}", fh.suite_id);
     println!("  flags          : 0x{:08x}", fh.flags);
     println!("  header len     : {} bytes", fh.header_len);
@@ -47,7 +50,10 @@ pub fn run(args: InspectArgs) -> anyhow::Result<()> {
     println!("  header hash    : {}", hex::encode(header_hash));
     println!();
     println!("Policy");
-    println!("  threshold      : {}/{}", policy.threshold, policy.total_shares);
+    println!(
+        "  threshold      : {}/{}",
+        policy.threshold, policy.total_shares
+    );
     println!("  wrapper count  : {}", policy.wrapper_count);
     println!();
     println!("Wrappers ({}):", wraps.wrappers.len());
@@ -57,7 +63,10 @@ pub fn run(args: InspectArgs) -> anyhow::Result<()> {
             WRAPPER_TYPE_X25519 => "X25519",
             WRAPPER_TYPE_MLKEM768_X25519 => "MLKEM768-X25519",
             WRAPPER_TYPE_THRESHOLD => "THRESHOLD",
-            t => return Ok(println!("  [{i}] unknown type 0x{t:04x}")),
+            t => {
+                println!("  [{i}] unknown type 0x{t:04x}");
+                return Ok(());
+            }
         };
         // wrapper_id convention: file_uuid(16) || user_label
         let label = if entry.wrapper_id.len() > 16 {

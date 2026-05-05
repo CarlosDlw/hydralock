@@ -1,17 +1,20 @@
-/// Metadata encryption and decryption via AES-256-GCM-SIV.
-///
-/// Uses control-plane key (`k_control`) to encrypt the metadata plaintext
-/// (serialized as CBOR canonical). The nonce is derived deterministically
-/// from the plaintext itself via BLAKE3 to ensure reproducibility.
-///
-/// AAD binds to: header hash, suite_id, section_type, and file_uuid to prevent
-/// cross-file splicing and tampering.
+//! Metadata encryption and decryption via AES-256-GCM-SIV.
+//!
+//! Uses control-plane key (`k_control`) to encrypt the metadata plaintext
+//! (serialized as CBOR canonical). The nonce is derived deterministically
+//! from the plaintext itself via BLAKE3 to ensure reproducibility.
+//!
+//! AAD binds to: header hash, suite_id, section_type, and file_uuid to prevent
+//! cross-file splicing and tampering.
 
-use aes_gcm_siv::{Aes256GcmSiv, KeyInit, Nonce, aead::{Aead, Payload}};
+use aes_gcm_siv::{
+    Aes256GcmSiv, KeyInit, Nonce,
+    aead::{Aead, Payload},
+};
 use generic_array::GenericArray;
 
 use crate::crypto::secret::SecretKey32;
-use crate::format::metadata_plaintext::{MetadataPlaintext, MetadataError as PlaintextError};
+use crate::format::metadata_plaintext::{MetadataError as PlaintextError, MetadataPlaintext};
 
 /// Metadata-specific AAD section type constant (must match overall AAD scheme).
 const METADATA_SECTION_TYPE: u8 = 0x04;
@@ -60,12 +63,12 @@ pub fn encrypt_metadata(
 
     // Construct AAD: magic (4) + version (2) + suite (2) + type (1) + uuid (16) + header_hash (32) = 57 bytes
     let mut aad_bytes = Vec::with_capacity(57);
-    aad_bytes.extend_from_slice(b"HLK1");                    // magic
-    aad_bytes.extend_from_slice(&1u16.to_be_bytes());       // format version
-    aad_bytes.extend_from_slice(&suite_id.to_be_bytes());   // suite_id
-    aad_bytes.push(METADATA_SECTION_TYPE);                   // section type
-    aad_bytes.extend_from_slice(file_uuid);                 // file_uuid
-    aad_bytes.extend_from_slice(header_hash);               // header_hash
+    aad_bytes.extend_from_slice(b"HLK1"); // magic
+    aad_bytes.extend_from_slice(&1u16.to_be_bytes()); // format version
+    aad_bytes.extend_from_slice(&suite_id.to_be_bytes()); // suite_id
+    aad_bytes.push(METADATA_SECTION_TYPE); // section type
+    aad_bytes.extend_from_slice(file_uuid); // file_uuid
+    aad_bytes.extend_from_slice(header_hash); // header_hash
 
     // Initialize cipher with k_control.
     let key = GenericArray::from_slice(k_control.expose());
@@ -188,8 +191,8 @@ mod tests {
         let uuid = test_uuid();
         let header_hash = test_header_hash();
 
-        let encrypted = encrypt_metadata(&key, &meta, &uuid, 0x01, &header_hash)
-            .expect("encryption failed");
+        let encrypted =
+            encrypt_metadata(&key, &meta, &uuid, 0x01, &header_hash).expect("encryption failed");
         let decrypted = decrypt_metadata(&key, &encrypted, &uuid, 0x01, &header_hash)
             .expect("decryption failed");
 

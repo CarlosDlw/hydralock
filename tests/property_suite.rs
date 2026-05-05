@@ -4,7 +4,7 @@ use hydralock::crypto::kdf::{
 use hydralock::crypto::secret::{SecretKey32, fmk_from_bytes};
 use hydralock::format::header::{FIXED_HEADER_LEN, FixedHeader};
 use hydralock::format::policy::PolicySection;
-use hydralock::format::wraps::{WrapsSection, WrapperEntry};
+use hydralock::format::wraps::{WrapperEntry, WrapsSection};
 use hydralock::wrapper::threshold::{open as threshold_open, seal as threshold_seal};
 use proptest::prelude::*;
 use rand::{SeedableRng, rngs::StdRng};

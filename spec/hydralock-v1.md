@@ -1,6 +1,6 @@
-# HydraLock Container Format v1 (Draft)
+# HydraLock Container Format v1
 
-Status: Initial normative specification draft.
+Status: FROZEN — v1.0.0 (2026-05-05)
 
 ## 1. Scope
 
@@ -230,55 +230,51 @@ Current reference implementation:
   - `DuplicateWrapperId`
   - `LengthOverflow`
 
-  ## 11. Metadata Section (normative, initial)
+  ## 11. Metadata Section (normative)
 
   ### 11.1 Layout
 
-  The metadata section has an 8-byte fixed header followed by encrypted metadata
-  ciphertext.
+  The metadata bytes are stored directly in the container with no standalone
+  metadata header.
 
-  Metadata section header:
+  Wire layout:
 
   ```text
   Offset  Size  Field
-  0       2     metadata_version (u16)
-  2       2     reserved (bytes)
-  4       4     ciphertext_len (u32)
-  8       N     ciphertext bytes
+  0       12    nonce
+  12      N     ciphertext_with_tag
   ```
 
   ### 11.2 Mandatory rules
 
-  - `metadata_version` MUST be `1` in v1.
-  - `reserved` MUST contain only zero bytes.
-  - `ciphertext_len` MUST be greater than zero.
-  - Parser MUST consume the section exactly, with no trailing bytes.
+  - `metadata_len` from the fixed header MUST equal the exact number of metadata
+    bytes present between the wraps section and the payload section.
+  - The metadata bytes MUST be interpreted as `nonce (12 bytes) || AES-256-GCM-SIV ciphertext_with_tag`.
+  - The metadata AEAD AAD MUST be `magic || version || suite_id || section_type=0x04 || file_uuid || header_hash`.
+  - Implementations MUST reject metadata shorter than 12 bytes.
+  - Implementations MUST fail closed if AEAD authentication or CBOR decoding fails.
 
   ### 11.3 Mandatory parser errors
 
   Implementations MUST reject:
 
-  - unsupported `metadata_version`;
-  - non-zero `reserved` bytes;
-  - `ciphertext_len == 0`;
-  - truncated ciphertext bytes;
-  - section with trailing bytes after declared `ciphertext_len`.
+  - metadata bytes shorter than 12 bytes;
+  - AEAD authentication failure;
+  - CBOR decoding failure;
+  - invalid metadata plaintext structure.
 
   ### 11.4 Rust reference mapping
 
   Current reference implementation:
 
-  - file: `src/format/metadata.rs`
-  - constants:
-    - `METADATA_HEADER_LEN = 8`
+  - files:
+    - `src/crypto/metadata.rs`
+    - `src/ops/decrypt.rs`
   - errors:
-    - `InvalidLength`
-    - `UnsupportedMetadataVersion`
-    - `NonZeroReserved`
-    - `EmptyCiphertext`
-    - `TruncatedCiphertext`
     - `InvalidCiphertextLength`
-    - `LengthOverflow`
+    - `DecryptionFailed`
+    - `DecodingFailed`
+    - `PlaintextError`
 
   ## 12. Footer Section (normative, initial)
 
@@ -425,13 +421,10 @@ Current reference implementation:
     - `TrailingBytes`
     - `LengthOverflow`
 
-  ## 14. Open items to finalize v1
+## 14. Implementation notes
 
-This draft does not yet finalize:
-
-- final extensibility rules;
-- complete normative algorithms for encrypt/decrypt/verify/rewrap;
-- final full suite and wrapper definitions.
+All items listed as open in previous drafts have been resolved and are reflected
+in the normative text above.
 
 ## 15. Normative `wrapper_id` convention
 
@@ -461,10 +454,3 @@ Normative rules:
 Rust reference:
 - `ops::decrypt::extract_file_uuid` extracts `wrapper_id[0..16]` from the first wrapper.
 - `ops::encrypt::WrapperSpec::wire_id` constructs `file_uuid || label`.
-
-## 16. Immediate next steps
-
-1. Define header-to-section offset invariants across all sections.
-2. Extend vectors specification with payload corruption cases.
-3. Define metadata canonical plaintext layout and AAD binding.
-4. Specify KDF tree (BLAKE3 derive_key) and AAD construction per section.

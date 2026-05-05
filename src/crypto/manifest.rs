@@ -1,20 +1,20 @@
-/// Manifest builder and verifier for global payload integrity.
-///
-/// The manifest provides a cryptographically authenticated summary of all
-/// encrypted chunks in a container. After all chunks are produced by
-/// PayloadWriter, the manifest root is computed and stored in MetadataPlaintext
-/// (field `manifest_root`) and in the authenticated footer.
-///
-/// Construction:
-///   For each chunk ciphertext_with_tag in order:
-///     entry_hash = BLAKE3(ciphertext_with_tag)
-///   manifest_root = BLAKE3_keyed(k_manifest, entry_hash[0] || entry_hash[1] || ...)
-///
-/// The keyed root binds the manifest to the specific k_manifest derived from
-/// the file's KDF tree, preventing cross-file manifest splicing.
+//! Manifest builder and verifier for global payload integrity.
+//!
+//! The manifest provides a cryptographically authenticated summary of all
+//! encrypted chunks in a container. After all chunks are produced by
+//! PayloadWriter, the manifest root is computed and stored in MetadataPlaintext
+//! (field `manifest_root`) and in the authenticated footer.
+//!
+//! Construction:
+//!   For each chunk ciphertext_with_tag in order:
+//!     entry_hash = BLAKE3(ciphertext_with_tag)
+//!   manifest_root = BLAKE3_keyed(k_manifest, entry_hash[0] || entry_hash[1] || ...)
+//!
+//! The keyed root binds the manifest to the specific k_manifest derived from
+//! the file's KDF tree, preventing cross-file manifest splicing.
 
-use subtle::ConstantTimeEq;
 use crate::crypto::secret::SecretKey32;
+use subtle::ConstantTimeEq;
 
 /// Errors during manifest construction or verification.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -118,11 +118,7 @@ mod tests {
 
     #[test]
     fn manifest_root_is_deterministic() {
-        let chunks: Vec<Vec<u8>> = vec![
-            vec![0x01u8; 80],
-            vec![0x02u8; 80],
-            vec![0x03u8; 80],
-        ];
+        let chunks: Vec<Vec<u8>> = vec![vec![0x01u8; 80], vec![0x02u8; 80], vec![0x03u8; 80]];
 
         let mut b1 = ManifestBuilder::new(test_k_manifest());
         let mut b2 = ManifestBuilder::new(test_k_manifest());
@@ -187,11 +183,7 @@ mod tests {
 
     #[test]
     fn verify_correct_root_passes() {
-        let chunks: Vec<Vec<u8>> = vec![
-            vec![0x11u8; 48],
-            vec![0x22u8; 48],
-            vec![0x33u8; 48],
-        ];
+        let chunks: Vec<Vec<u8>> = vec![vec![0x11u8; 48], vec![0x22u8; 48], vec![0x33u8; 48]];
 
         let mut builder = ManifestBuilder::new(test_k_manifest());
         for c in &chunks {
@@ -247,7 +239,6 @@ mod tests {
 
         let k_payload_master = SecretKey32::from_bytes([0x77u8; 32]);
         let file_uuid = [0x88u8; 16];
-        let header_hash = [0x99u8; 32];
         let suite_id = 0x01u16;
         let plaintext: Vec<u8> = (0u8..=255u8).cycle().take(300).collect();
 
@@ -256,7 +247,6 @@ mod tests {
             k_payload_master,
             file_uuid,
             suite_id,
-            header_hash,
             64,
             100,
             plaintext.len() as u64,

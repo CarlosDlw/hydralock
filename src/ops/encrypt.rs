@@ -3,12 +3,14 @@ use rand::RngCore;
 use crate::crypto::aad::WrapperAadInput;
 use crate::crypto::kdf::{derive_root_key, derive_subkeys};
 use crate::crypto::manifest::ManifestBuilder;
+use crate::crypto::manifest::ManifestError;
+use crate::crypto::metadata::MetadataEncryptionError;
 use crate::crypto::metadata::encrypt_metadata;
-use crate::crypto::secret::{Fmk, SecretKey32, fmk_from_bytes, fmk_expose};
+use crate::crypto::password::{Argon2Params, Argon2Profile};
+use crate::crypto::secret::{Fmk, SecretKey32, fmk_expose, fmk_from_bytes};
 use crate::crypto::verify::build_footer;
 use crate::format::footer::FooterSectionError;
 use crate::format::header::{FIXED_HEADER_LEN, FixedHeader, FixedHeaderError};
-use crate::crypto::manifest::ManifestError;
 use crate::format::metadata_plaintext::{MetadataError, MetadataPlaintext, PaddingBucket};
 use crate::format::payload::{CHUNK_FLAG_FINAL, ChunkEntry, PayloadSection, PayloadSectionError};
 use crate::format::payload_writer::{PayloadWriter, PayloadWriterError};
@@ -21,8 +23,6 @@ use crate::wrapper::mlkem768_x25519::{
 };
 use crate::wrapper::passargon2id::{PASS_ARGON2ID_STANZA_LEN, PassArgon2idStanza};
 use crate::wrapper::x25519::{X25519_STANZA_LEN, X25519Stanza};
-use crate::crypto::password::{Argon2Params, Argon2Profile};
-use crate::crypto::metadata::MetadataEncryptionError;
 
 pub const DEFAULT_CHUNK_SIZE: u32 = 65_536;
 pub const DEFAULT_EPOCH_SIZE: u32 = 256;
@@ -46,7 +46,7 @@ pub enum WrapperSpec {
     },
     /// Protect FMK with ML-KEM-768 + X25519 hybrid.
     MlKem768X25519 {
-        recipient_pk: MlKem768X25519RecipientPublicKey,
+        recipient_pk: Box<MlKem768X25519RecipientPublicKey>,
         wrapper_id: Vec<u8>,
     },
 }
@@ -71,9 +71,13 @@ impl WrapperSpec {
 
     fn wrapper_type(&self) -> u16 {
         match self {
-            WrapperSpec::PassArgon2id { .. } => crate::wrapper::passargon2id::WRAPPER_TYPE_PASS_ARGON2ID,
+            WrapperSpec::PassArgon2id { .. } => {
+                crate::wrapper::passargon2id::WRAPPER_TYPE_PASS_ARGON2ID
+            }
             WrapperSpec::X25519 { .. } => crate::wrapper::x25519::WRAPPER_TYPE_X25519,
-            WrapperSpec::MlKem768X25519 { .. } => crate::wrapper::mlkem768_x25519::WRAPPER_TYPE_MLKEM768_X25519,
+            WrapperSpec::MlKem768X25519 { .. } => {
+                crate::wrapper::mlkem768_x25519::WRAPPER_TYPE_MLKEM768_X25519
+            }
         }
     }
 
@@ -142,7 +146,10 @@ impl core::fmt::Display for EncryptError {
             Self::MetadataEncode(e) => write!(f, "metadata encode error: {e:?}"),
             Self::MetadataEncrypt(e) => write!(f, "metadata encrypt error: {e:?}"),
             Self::MetadataSizeMismatch { expected, actual } => {
-                write!(f, "metadata size mismatch: expected {expected}, got {actual}")
+                write!(
+                    f,
+                    "metadata size mismatch: expected {expected}, got {actual}"
+                )
             }
             Self::PolicyEncode(e) => write!(f, "policy encode error: {e:?}"),
             Self::WrapsEncode(e) => write!(f, "wraps encode error: {e:?}"),
@@ -259,7 +266,6 @@ pub fn encrypt<R: RngCore>(
         k_payload_master,
         file_uuid,
         suite_id,
-        header_hash,
         chunk_size,
         epoch_size,
         plaintext_total,
@@ -296,8 +302,9 @@ pub fn encrypt<R: RngCore>(
         padding_bucket: input.padding.clone(),
     };
     let k_control = SecretKey32::from_bytes(*subkeys.k_control.expose());
-    let encrypted_metadata = encrypt_metadata(&k_control, &real_meta, &file_uuid, suite_id, &header_hash)
-        .map_err(EncryptError::MetadataEncrypt)?;
+    let encrypted_metadata =
+        encrypt_metadata(&k_control, &real_meta, &file_uuid, suite_id, &header_hash)
+            .map_err(EncryptError::MetadataEncrypt)?;
 
     if encrypted_metadata.len() != metadata_len {
         return Err(EncryptError::MetadataSizeMismatch {
@@ -320,7 +327,11 @@ pub fn encrypt<R: RngCore>(
         let fmk_key = SecretKey32::from_bytes(*fmk_expose(&fmk));
 
         let stanza_bytes: Vec<u8> = match spec {
-            WrapperSpec::PassArgon2id { passphrase, profile, .. } => {
+            WrapperSpec::PassArgon2id {
+                passphrase,
+                profile,
+                ..
+            } => {
                 let params = Argon2Params {
                     version: 19,
                     memory_kib: profile.memory_kib(),
@@ -328,17 +339,12 @@ pub fn encrypt<R: RngCore>(
                     parallelism: profile.parallelism(),
                     salt: [0u8; 32], // filled by seal_with_rng
                 };
-                let stanza = PassArgon2idStanza::seal_with_rng(
-                    &fmk_key,
-                    params,
-                    passphrase,
-                    &aad,
-                    rng,
-                )
-                .map_err(|e| EncryptError::WrapperSealFailed {
-                    index: i,
-                    reason: format!("{e:?}"),
-                })?;
+                let stanza =
+                    PassArgon2idStanza::seal_with_rng(&fmk_key, params, passphrase, &aad, rng)
+                        .map_err(|e| EncryptError::WrapperSealFailed {
+                            index: i,
+                            reason: format!("{e:?}"),
+                        })?;
                 stanza.encode().to_vec()
             }
             WrapperSpec::X25519 { recipient_pk, .. } => {
@@ -350,12 +356,11 @@ pub fn encrypt<R: RngCore>(
                 stanza.encode().to_vec()
             }
             WrapperSpec::MlKem768X25519 { recipient_pk, .. } => {
-                let stanza =
-                    MlKem768X25519Stanza::seal_with_rng(&fmk_key, recipient_pk, &aad, rng)
-                        .map_err(|e| EncryptError::WrapperSealFailed {
-                            index: i,
-                            reason: format!("{e:?}"),
-                        })?;
+                let stanza = MlKem768X25519Stanza::seal_with_rng(&fmk_key, recipient_pk, &aad, rng)
+                    .map_err(|e| EncryptError::WrapperSealFailed {
+                        index: i,
+                        reason: format!("{e:?}"),
+                    })?;
                 stanza.encode().to_vec()
             }
         };
@@ -381,9 +386,7 @@ pub fn encrypt<R: RngCore>(
         wraps_version: 1,
         wrappers: wrapper_entries,
     };
-    let wraps_bytes = wraps_section
-        .encode()
-        .map_err(EncryptError::WrapsEncode)?;
+    let wraps_bytes = wraps_section.encode().map_err(EncryptError::WrapsEncode)?;
 
     // Convert EncryptedChunkEntry → ChunkEntry
     let chunk_entries: Vec<ChunkEntry> = encrypted_chunks
@@ -394,7 +397,11 @@ pub fn encrypt<R: RngCore>(
             let ciphertext = ct[..ct_len].to_vec();
             let tag = ct[ct_len..].to_vec();
             let flags: u16 = if e.is_final { CHUNK_FLAG_FINAL } else { 0 };
-            ChunkEntry { flags, ciphertext, tag }
+            ChunkEntry {
+                flags,
+                ciphertext,
+                tag,
+            }
         })
         .collect();
 

@@ -1,0 +1,23 @@
+{
+  "case_id": "PASS-ACCEPT-001",
+  "inspect": {
+    "format_version_major": 1,
+    "format_version_minor": 0,
+    "header_hash": "857e9920a282d33664a44ca7c393670457d3d2d853f444b72d472c49ed34c87e",
+    "suite_id": 1,
+    "threshold": 1,
+    "total_container_bytes": 446,
+    "total_shares": 1,
+    "wrapper_count": 1,
+    "wrapper_types": [
+      "PASS-ARGON2ID"
+    ]
+  },
+  "logical_name": "minimal.bin",
+  "plaintext_hex": "68656c6c6f2068796472616c6f636b21",
+  "verify": {
+    "result": "valid"
+  },
+  "version": "1",
+  "wrapper_type": "PassArgon2id"
+}

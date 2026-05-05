@@ -1,0 +1,24 @@
+{
+  "case_id": "PASS-PAD-001",
+  "inspect": {
+    "format_version_major": 1,
+    "format_version_minor": 0,
+    "header_hash": "cd33b706e30ef787b513fb526d43b510db2371f2341ca6b0fb3611b5a82a6f48",
+    "suite_id": 1,
+    "threshold": 1,
+    "total_container_bytes": 470,
+    "total_shares": 1,
+    "wrapper_count": 1,
+    "wrapper_types": [
+      "PASS-ARGON2ID"
+    ]
+  },
+  "logical_name": "padded.bin",
+  "notes": "metadata is padded to the next power-of-2 multiple of 1024 bytes",
+  "plaintext_hex": "70616464696e672074657374207061796c6f616420776974682073686f727420636f6e74656e74",
+  "verify": {
+    "result": "valid"
+  },
+  "version": "1",
+  "wrapper_type": "PassArgon2id"
+}

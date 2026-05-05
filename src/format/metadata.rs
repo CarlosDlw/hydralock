@@ -23,7 +23,10 @@ impl fmt::Display for MetadataSectionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidLength { min, actual } => {
-                write!(f, "invalid metadata section length: expected at least {min}, got {actual}")
+                write!(
+                    f,
+                    "invalid metadata section length: expected at least {min}, got {actual}"
+                )
             }
             Self::UnsupportedMetadataVersion { expected, actual } => write!(
                 f,
@@ -68,8 +71,7 @@ impl MetadataSection {
             return Err(MetadataSectionError::NonZeroReserved);
         }
 
-        let ciphertext_len =
-            u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]) as usize;
+        let ciphertext_len = u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]) as usize;
 
         if ciphertext_len == 0 {
             return Err(MetadataSectionError::EmptyCiphertext);
@@ -111,8 +113,8 @@ impl MetadataSection {
             return Err(MetadataSectionError::EmptyCiphertext);
         }
 
-        let ciphertext_len =
-            u32::try_from(self.ciphertext.len()).map_err(|_| MetadataSectionError::LengthOverflow)?;
+        let ciphertext_len = u32::try_from(self.ciphertext.len())
+            .map_err(|_| MetadataSectionError::LengthOverflow)?;
 
         let mut out = Vec::with_capacity(METADATA_HEADER_LEN + self.ciphertext.len());
         out.extend_from_slice(&self.metadata_version.to_be_bytes());
@@ -147,7 +149,10 @@ mod tests {
     fn metadata_len_is_header_plus_ciphertext() {
         let metadata = sample_metadata();
         let encoded = metadata.encode().expect("metadata should encode");
-        assert_eq!(encoded.len(), METADATA_HEADER_LEN + metadata.ciphertext.len());
+        assert_eq!(
+            encoded.len(),
+            METADATA_HEADER_LEN + metadata.ciphertext.len()
+        );
     }
 
     #[test]

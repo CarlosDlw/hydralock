@@ -1,0 +1,23 @@
+{
+  "case_id": "X25519-ACCEPT-001",
+  "inspect": {
+    "format_version_major": 1,
+    "format_version_minor": 0,
+    "header_hash": "ab257fed44a2ba64274f21f8da957122abd410ac03d74d57b259601de1ab1fd5",
+    "suite_id": 1,
+    "threshold": 1,
+    "total_container_bytes": 460,
+    "total_shares": 1,
+    "wrapper_count": 1,
+    "wrapper_types": [
+      "X25519"
+    ]
+  },
+  "logical_name": "x25519-test.bin",
+  "plaintext_hex": "68796472616c6f636b2078323535313920616363657074616e6365207465737420766563746f72",
+  "verify": {
+    "result": "valid"
+  },
+  "version": "1",
+  "wrapper_type": "X25519"
+}

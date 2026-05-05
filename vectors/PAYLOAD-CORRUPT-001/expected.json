@@ -1,0 +1,10 @@
+{
+  "case_id": "PAYLOAD-CORRUPT-001",
+  "error": {
+    "code": "ContainerTooShort"
+  },
+  "expect": "reject",
+  "notes": "original container 470 bytes, truncated to 420 bytes (50 bytes removed from end)",
+  "operation": "decrypt",
+  "version": "1"
+}

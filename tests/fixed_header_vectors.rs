@@ -71,8 +71,14 @@ fn assert_accept_case(case_id: &str) {
     let expected_parsed = expected.parsed.expect("parsed section required");
 
     assert_eq!(expected_parsed.magic.as_bytes(), &MAGIC);
-    assert_eq!(parsed.format_version_major, expected_parsed.format_version_major);
-    assert_eq!(parsed.format_version_minor, expected_parsed.format_version_minor);
+    assert_eq!(
+        parsed.format_version_major,
+        expected_parsed.format_version_major
+    );
+    assert_eq!(
+        parsed.format_version_minor,
+        expected_parsed.format_version_minor
+    );
     assert_eq!(parsed.suite_id, expected_parsed.suite_id);
     assert_eq!(parsed.flags, expected_parsed.flags);
     assert_eq!(parsed.header_len, expected_parsed.header_len);

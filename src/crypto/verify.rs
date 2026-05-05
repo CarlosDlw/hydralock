@@ -1,26 +1,26 @@
-/// Footer authentication and full container verification.
-///
-/// The footer auth_tag is a 32-byte BLAKE3 keyed MAC that authenticates all
-/// container bytes preceding the footer section. This closes the integrity
-/// chain:
-///
-///   chunk[i] → authenticated by XChaCha20-Poly1305 AEAD (per-chunk key)
-///   manifest_root → BLAKE3_keyed(k_manifest, chunk_hash[0] || ... || chunk_hash[n])
-///   footer auth_tag → BLAKE3_keyed(k_manifest, pre_footer_bytes)
-///
-/// The `k_manifest` key binds both the manifest root and the footer auth_tag
-/// to the specific file's KDF tree. An attacker who does not know the FMK
-/// cannot forge either.
-///
-/// Verify modes:
-///   - `verify_container`: full verify — checks footer auth_tag and manifest
-///     root against the provided encrypted chunks.
-///   - `verify_container_no_decrypt`: structural integrity only — checks the
-///     footer auth_tag without requiring access to decrypted plaintext.
+//! Footer authentication and full container verification.
+//!
+//! The footer auth_tag is a 32-byte BLAKE3 keyed MAC that authenticates all
+//! container bytes preceding the footer section. This closes the integrity
+//! chain:
+//!
+//!   chunk[i] → authenticated by XChaCha20-Poly1305 AEAD (per-chunk key)
+//!   manifest_root → BLAKE3_keyed(k_manifest, chunk_hash[0] || ... || chunk_hash[n])
+//!   footer auth_tag → BLAKE3_keyed(k_manifest, pre_footer_bytes)
+//!
+//! The `k_manifest` key binds both the manifest root and the footer auth_tag
+//! to the specific file's KDF tree. An attacker who does not know the FMK
+//! cannot forge either.
+//!
+//! Verify modes:
+//!   - `verify_container`: full verify — checks footer auth_tag and manifest
+//!     root against the provided encrypted chunks.
+//!   - `verify_container_no_decrypt`: structural integrity only — checks the
+//!     footer auth_tag without requiring access to decrypted plaintext.
 
 use subtle::ConstantTimeEq;
 
-use crate::crypto::manifest::{verify_manifest_root, ManifestError};
+use crate::crypto::manifest::{ManifestError, verify_manifest_root};
 use crate::crypto::secret::SecretKey32;
 use crate::format::footer::{FooterSection, FooterSectionError};
 
@@ -300,8 +300,7 @@ mod tests {
         let root = [0xCDu8; 32];
 
         let footer_bytes = build_footer(&k, root, &pre_footer);
-        verify_container_no_decrypt(&k, &pre_footer, &footer_bytes)
-            .expect("verify must pass");
+        verify_container_no_decrypt(&k, &pre_footer, &footer_bytes).expect("verify must pass");
     }
 
     #[test]
@@ -357,7 +356,6 @@ mod tests {
             k_payload_master,
             [0x88u8; 16],
             0x01,
-            [0x99u8; 32],
             64,
             100,
             plaintext.len() as u64,
@@ -387,8 +385,7 @@ mod tests {
 
         let footer_bytes = build_footer(&k, root, &pre_footer);
 
-        verify_container(&k, &pre_footer, &footer_bytes, &chunks)
-            .expect("full verify must pass");
+        verify_container(&k, &pre_footer, &footer_bytes, &chunks).expect("full verify must pass");
     }
 
     #[test]

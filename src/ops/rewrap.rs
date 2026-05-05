@@ -1,43 +1,44 @@
-/// Container rewrap — replace the wrapped secrets section (and policy section)
-/// without re-encrypting the payload.
-///
-/// # What changes
-///
-/// | Section          | Action                              |
-/// |------------------|-------------------------------------|
-/// | Fixed header     | Recomputed (new wraps_len / offset) |
-/// | Policy section   | Replaced (new threshold / n)        |
-/// | Wraps section    | Replaced (new sealed stanzas)       |
-/// | Metadata section | Preserved verbatim (opaque bytes)   |
-/// | Payload section  | Preserved verbatim (ciphertexts)    |
-/// | Footer auth_tag  | Recomputed over new pre-footer data |
-/// | manifest_root    | Preserved verbatim (unchanged)      |
-///
-/// # Circular-dependency break for wrapper AAD
-///
-/// Each wrapper stanza is sealed with an `AAD` that includes the 32-byte
-/// `header_hash = BLAKE3(fixed_header_bytes)`. Because the fixed header
-/// contains `wraps_len`, which depends on the final stanza sizes, the hash
-/// is not yet known when you start sealing stanzas.
-///
-/// The solution is a two-step API:
-///
-/// 1. Call [`compute_rewrap_header_hash`] with the sizes of the new entries
-///    (`(wrapper_id_len, stanza_len)` per entry) to obtain `header_hash`.
-/// 2. Seal each new wrapper stanza passing that `header_hash` in the
-///    `WrapperAadInput`.
-/// 3. Call [`rewrap_container`] with the sealed `WrapperEntry` list.
-///
-/// Stanza sizes are deterministic per wrapper type:
-///
-/// | Wrapper type            | `stanza_len` (bytes) |
-/// |-------------------------|----------------------|
-/// | `PASS-ARGON2ID`         | 110                  |
-/// | `X25519`                | 94                   |
-/// | `MLKEM768-X25519`       | 1182                 |
-/// | `THRESHOLD` share       | 65                   |
+//! Container rewrap — replace the wrapped secrets section (and policy section)
+//! without re-encrypting the payload.
+//!
+//! # What changes
+//!
+//! | Section          | Action                              |
+//! |------------------|-------------------------------------|
+//! | Fixed header     | Recomputed (new wraps_len / offset) |
+//! | Policy section   | Replaced (new threshold / n)        |
+//! | Wraps section    | Replaced (new sealed stanzas)       |
+//! | Metadata section | Preserved verbatim (opaque bytes)   |
+//! | Payload section  | Preserved verbatim (ciphertexts)    |
+//! | Footer auth_tag  | Recomputed over new pre-footer data |
+//! | manifest_root    | Preserved verbatim (unchanged)      |
+//!
+//! # Circular-dependency break for wrapper AAD
+//!
+//! Each wrapper stanza is sealed with an `AAD` that includes the 32-byte
+//! `header_hash = BLAKE3(fixed_header_bytes)`. Because the fixed header
+//! contains `wraps_len`, which depends on the final stanza sizes, the hash
+//! is not yet known when you start sealing stanzas.
+//!
+//! The solution is a two-step API:
+//!
+//! 1. Call [`compute_rewrap_header_hash`] with the sizes of the new entries
+//!    (`(wrapper_id_len, stanza_len)` per entry) to obtain `header_hash`.
+//! 2. Seal each new wrapper stanza passing that `header_hash` in the
+//!    `WrapperAadInput`.
+//! 3. Call [`rewrap_container`] with the sealed `WrapperEntry` list.
+//!
+//! Stanza sizes are deterministic per wrapper type:
+//!
+//! | Wrapper type            | `stanza_len` (bytes) |
+//! |-------------------------|----------------------|
+//! | `PASS-ARGON2ID`         | 110                  |
+//! | `X25519`                | 94                   |
+//! | `MLKEM768-X25519`       | 1182                 |
+//! | `THRESHOLD` share       | 65                   |
 
 use crate::crypto::kdf::{derive_root_key, derive_subkeys};
+use crate::crypto::metadata::{decrypt_metadata, encrypt_metadata};
 use crate::crypto::secret::{Fmk, SecretKey32};
 use crate::crypto::verify::{build_footer, verify_container_no_decrypt};
 use crate::format::footer::{FooterSection, FooterSectionError};
@@ -45,7 +46,7 @@ use crate::format::header::{FIXED_HEADER_LEN, FixedHeader, FixedHeaderError};
 use crate::format::payload::PAYLOAD_HEADER_LEN;
 use crate::format::policy::{POLICY_SECTION_LEN, PolicySection, PolicySectionError};
 use crate::format::wraps::{
-    WRAPS_HEADER_LEN, WRAPPER_ENTRY_HEADER_LEN, WrapsSection, WrapsSectionError, WrapperEntry,
+    WRAPPER_ENTRY_HEADER_LEN, WRAPS_HEADER_LEN, WrapperEntry, WrapsSection, WrapsSectionError,
 };
 
 // ── Error type ───────────────────────────────────────────────────────────────
@@ -69,13 +70,18 @@ pub enum RewrapError {
     /// Arithmetic overflow during layout computation.
     LayoutOverflow,
     /// New wrapper count is below `total_shares` in the new policy.
-    PolicyMismatch { wrapper_count: usize, total_shares: u8 },
+    PolicyMismatch {
+        wrapper_count: usize,
+        total_shares: u8,
+    },
     /// A header field value exceeds its wire representation range.
     HeaderFieldOverflow,
     /// The manifest_root in the original footer has an unexpected size.
     InvalidManifestRootSize { actual: usize },
     /// The original container's footer auth_tag is invalid (container tampered or wrong FMK).
     InvalidOriginalContainer,
+    /// Metadata decryption or re-encryption failed during rewrap (wrong FMK or corrupt bytes).
+    MetadataReencryptFailed,
 }
 
 impl core::fmt::Display for RewrapError {
@@ -172,7 +178,7 @@ pub fn rewrap_container(
         });
     }
 
-    // ── 3. Extract old metadata bytes (preserved unchanged) ───────────────
+    // ── 3. Locate metadata bytes and compute old header hash ─────────────
     let wraps_start = FIXED_HEADER_LEN + orig_fh.policy_len as usize;
     let wraps_end = wraps_start + orig_fh.wraps_len as usize;
     let metadata_start = wraps_end;
@@ -184,6 +190,7 @@ pub fn rewrap_container(
     }
 
     let old_metadata_bytes = &container[metadata_start..metadata_end];
+    let old_header_hash: [u8; 32] = *blake3::hash(&container[..FIXED_HEADER_LEN]).as_bytes();
 
     // ── 4. Scan the payload to find the footer start ──────────────────────
     let footer_start = scan_payload_end(container, payload_offset)?;
@@ -197,20 +204,21 @@ pub fn rewrap_container(
 
     // ── 5. Parse old footer — extract manifest_root (preserved unchanged) ─
     let old_footer = FooterSection::parse(old_footer_bytes)?;
-    let manifest_root: [u8; 32] =
-        old_footer.manifest_root.as_slice().try_into().map_err(|_| {
-            RewrapError::InvalidManifestRootSize {
-                actual: old_footer.manifest_root.len(),
-            }
+    let manifest_root: [u8; 32] = old_footer
+        .manifest_root
+        .as_slice()
+        .try_into()
+        .map_err(|_| RewrapError::InvalidManifestRootSize {
+            actual: old_footer.manifest_root.len(),
         })?;
 
     // ── 5.5 Verify original container integrity before rewriting ─────────
     // Ensures we are not rewrapping a tampered container. Requires deriving
     // k_manifest from the provided FMK.
+    let root_key = derive_root_key(fmk, file_uuid);
+    let subkeys = derive_subkeys(&root_key);
     {
-        let orig_root_key = derive_root_key(fmk, file_uuid);
-        let orig_subkeys = derive_subkeys(&orig_root_key);
-        let orig_k_manifest = SecretKey32::from_bytes(*orig_subkeys.k_manifest.expose());
+        let orig_k_manifest = SecretKey32::from_bytes(*subkeys.k_manifest.expose());
         let orig_pre_footer = &container[..footer_start];
         verify_container_no_decrypt(&orig_k_manifest, orig_pre_footer, old_footer_bytes)
             .map_err(|_| RewrapError::InvalidOriginalContainer)?;
@@ -222,7 +230,10 @@ pub fn rewrap_container(
         .map(|e| (e.wrapper_id.len(), e.stanza.len()))
         .collect();
 
-    let new_wraps_section = WrapsSection { wraps_version: 1, wrappers: new_wrappers };
+    let new_wraps_section = WrapsSection {
+        wraps_version: 1,
+        wrappers: new_wrappers,
+    };
     let new_wraps_bytes = new_wraps_section
         .encode()
         .map_err(RewrapError::WrapsEncodeFailed)?;
@@ -231,25 +242,48 @@ pub fn rewrap_container(
     let new_fh = build_new_fixed_header(&orig_fh, &new_policy, &new_entry_sizes)?;
 
     // ── 8. Encode new policy ──────────────────────────────────────────────
-    let new_policy_bytes = new_policy.encode().map_err(RewrapError::PolicyEncodeFailed)?;
+    let new_policy_bytes = new_policy
+        .encode()
+        .map_err(RewrapError::PolicyEncodeFailed)?;
+
+    // ── 8.5 Re-encrypt metadata with the new header_hash ─────────────────
+    // The metadata bytes in the container are raw crypto bytes: nonce(12) || AEAD_ct.
+    // Metadata AAD binds to header_hash; after rewrap the fixed header changes,
+    // so the ciphertext must be re-sealed under the new header hash.
+    let new_header_hash: [u8; 32] = *blake3::hash(&new_fh.encode()).as_bytes();
+    let k_control = SecretKey32::from_bytes(*subkeys.k_control.expose());
+    let meta_plain = decrypt_metadata(
+        &k_control,
+        old_metadata_bytes,
+        file_uuid,
+        orig_fh.suite_id,
+        &old_header_hash,
+    )
+    .map_err(|_| RewrapError::MetadataReencryptFailed)?;
+    let new_metadata_bytes = encrypt_metadata(
+        &k_control,
+        &meta_plain,
+        file_uuid,
+        orig_fh.suite_id,
+        &new_header_hash,
+    )
+    .map_err(|_| RewrapError::MetadataReencryptFailed)?;
 
     // ── 9. Assemble pre-footer bytes ──────────────────────────────────────
     let pre_footer_capacity = FIXED_HEADER_LEN
         + new_policy_bytes.len()
         + new_wraps_bytes.len()
-        + old_metadata_bytes.len()
+        + new_metadata_bytes.len()
         + old_payload_bytes.len();
 
     let mut pre_footer: Vec<u8> = Vec::with_capacity(pre_footer_capacity);
     pre_footer.extend_from_slice(&new_fh.encode());
     pre_footer.extend_from_slice(&new_policy_bytes);
     pre_footer.extend_from_slice(&new_wraps_bytes);
-    pre_footer.extend_from_slice(old_metadata_bytes);
+    pre_footer.extend_from_slice(&new_metadata_bytes);
     pre_footer.extend_from_slice(old_payload_bytes);
 
     // ── 10. Derive k_manifest and recompute footer auth_tag ───────────────
-    let root_key = derive_root_key(fmk, file_uuid);
-    let subkeys = derive_subkeys(&root_key);
     let new_footer_bytes = build_footer(&subkeys.k_manifest, manifest_root, &pre_footer);
 
     // ── 11. Assemble the new container ────────────────────────────────────
@@ -357,8 +391,10 @@ fn build_new_fixed_header(
 mod tests {
     use super::*;
     use crate::crypto::kdf::{derive_root_key, derive_subkeys};
-    use crate::crypto::secret::{fmk_from_bytes};
+    use crate::crypto::metadata::encrypt_metadata;
+    use crate::crypto::secret::fmk_from_bytes;
     use crate::crypto::verify::{build_footer, verify_container_no_decrypt};
+    use crate::format::metadata_plaintext::{MetadataPlaintext, PaddingBucket};
     use crate::format::payload::CHUNK_FLAG_FINAL;
 
     fn test_fmk() -> Fmk {
@@ -366,8 +402,10 @@ mod tests {
     }
 
     fn test_file_uuid() -> [u8; 16] {
-        [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-         0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10]
+        [
+            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E,
+            0x0F, 0x10,
+        ]
     }
 
     fn dummy_wrapper_entry(id: &[u8], stanza_len: usize) -> WrapperEntry {
@@ -379,7 +417,10 @@ mod tests {
         }
     }
 
-    /// Build a minimal but structurally valid synthetic container.
+    /// Build a minimal but structurally valid synthetic container with real encrypted metadata.
+    ///
+    /// The metadata section is raw crypto bytes (nonce || AEAD_ct), matching the format
+    /// written by `ops::encrypt::encrypt`.
     fn build_test_container(fmk: &Fmk, file_uuid: &[u8; 16]) -> Vec<u8> {
         let policy = PolicySection {
             policy_version: 1,
@@ -396,14 +437,50 @@ mod tests {
         };
         let wraps_bytes = wraps.encode().unwrap();
 
-        let metadata_bytes = vec![0xBB; 64];
+        // Minimal payload: 16-byte header + 1 final chunk.
+        let chunk_ct = vec![0xCC; 48];
+        let tag = vec![0xDD; 16];
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&1u16.to_be_bytes());
+        payload.extend_from_slice(&0u16.to_be_bytes());
+        payload.extend_from_slice(&64u32.to_be_bytes());
+        payload.extend_from_slice(&16u32.to_be_bytes());
+        payload.extend_from_slice(&[0u8; 4]);
+        payload.extend_from_slice(&(48u32).to_be_bytes());
+        payload.extend_from_slice(&CHUNK_FLAG_FINAL.to_be_bytes());
+        payload.extend_from_slice(&[0u8; 2]);
+        payload.extend_from_slice(&chunk_ct);
+        payload.extend_from_slice(&tag);
 
+        let manifest_root = [0xEEu8; 32];
+        let meta_plain = MetadataPlaintext {
+            plaintext_size: 0,
+            logical_name: None,
+            mime_type: None,
+            created_at: None,
+            chunk_size: 64,
+            epoch_size: 256,
+            manifest_root,
+            payload_mode: 0,
+            padding_bucket: PaddingBucket::None,
+        };
+
+        let root_key = derive_root_key(fmk, file_uuid);
+        let subkeys = derive_subkeys(&root_key);
+        let k_control = SecretKey32::from_bytes(*subkeys.k_control.expose());
+
+        // Pass 1: encrypt with dummy header_hash to learn metadata_len.
+        // The metadata section in the container is raw crypto bytes (nonce || AEAD_ct).
+        let dummy_hash = [0u8; 32];
+        let dummy_ct =
+            encrypt_metadata(&k_control, &meta_plain, file_uuid, 0x0001, &dummy_hash).unwrap();
+        let metadata_len = dummy_ct.len() as u32;
+
+        // Build the fixed header with the real metadata_len.
         let policy_len = policy_bytes.len() as u32;
         let wraps_len = wraps_bytes.len() as u32;
-        let metadata_len = 64u32;
         let payload_offset =
             FIXED_HEADER_LEN as u64 + policy_len as u64 + wraps_len as u64 + metadata_len as u64;
-
         let fh = FixedHeader {
             format_version_major: 1,
             format_version_minor: 0,
@@ -416,21 +493,16 @@ mod tests {
             payload_offset,
         };
 
-        // Minimal payload: 16-byte header + 1 final chunk.
-        let chunk_ct = vec![0xCC; 48]; // ciphertext
-        let tag = vec![0xDD; 16]; // tag (tag_size = 16)
-        let mut payload = Vec::new();
-        payload.extend_from_slice(&1u16.to_be_bytes()); // payload_version
-        payload.extend_from_slice(&0u16.to_be_bytes()); // flags
-        payload.extend_from_slice(&64u32.to_be_bytes()); // chunk_size
-        payload.extend_from_slice(&16u32.to_be_bytes()); // tag_size
-        payload.extend_from_slice(&[0u8; 4]); // reserved
-        // Chunk header: ciphertext_len(4) + flags(2) + reserved(2)
-        payload.extend_from_slice(&(48u32).to_be_bytes());
-        payload.extend_from_slice(&CHUNK_FLAG_FINAL.to_be_bytes());
-        payload.extend_from_slice(&[0u8; 2]);
-        payload.extend_from_slice(&chunk_ct);
-        payload.extend_from_slice(&tag);
+        // Pass 2: encrypt metadata with real header_hash.
+        let real_header_hash: [u8; 32] = *blake3::hash(&fh.encode()).as_bytes();
+        let metadata_bytes = encrypt_metadata(
+            &k_control,
+            &meta_plain,
+            file_uuid,
+            0x0001,
+            &real_header_hash,
+        )
+        .unwrap();
 
         // Assemble pre-footer.
         let mut pre_footer = Vec::new();
@@ -440,12 +512,7 @@ mod tests {
         pre_footer.extend_from_slice(&metadata_bytes);
         pre_footer.extend_from_slice(&payload);
 
-        // Compute manifest_root and footer.
-        let root_key = derive_root_key(fmk, file_uuid);
-        let subkeys = derive_subkeys(&root_key);
-        let manifest_root = [0xEEu8; 32];
         let footer = build_footer(&subkeys.k_manifest, manifest_root, &pre_footer);
-
         pre_footer.extend_from_slice(&footer);
         pre_footer
     }
@@ -470,7 +537,10 @@ mod tests {
             dummy_wrapper_entry(b"alice", 94),
             dummy_wrapper_entry(b"bob", 110),
         ];
-        let wraps = WrapsSection { wraps_version: 1, wrappers: entries.clone() };
+        let wraps = WrapsSection {
+            wraps_version: 1,
+            wrappers: entries.clone(),
+        };
         let encoded = wraps.encode().unwrap();
         let sizes: Vec<(usize, usize)> = entries
             .iter()
@@ -557,8 +627,7 @@ mod tests {
 
         // Find footer start in the result container.
         let new_fh = FixedHeader::parse(&result[..FIXED_HEADER_LEN]).unwrap();
-        let footer_start =
-            scan_payload_end(&result, new_fh.payload_offset as usize).unwrap();
+        let footer_start = scan_payload_end(&result, new_fh.payload_offset as usize).unwrap();
 
         let pre_footer = &result[..footer_start];
         let footer_bytes = &result[footer_start..];
@@ -588,24 +657,25 @@ mod tests {
         let result = rewrap_container(&container, &fmk, &uuid, new_policy, new_wrappers).unwrap();
 
         let new_fh = FixedHeader::parse(&result[..FIXED_HEADER_LEN]).unwrap();
-        let new_payload_end =
-            scan_payload_end(&result, new_fh.payload_offset as usize).unwrap();
+        let new_payload_end = scan_payload_end(&result, new_fh.payload_offset as usize).unwrap();
         let new_payload = &result[new_fh.payload_offset as usize..new_payload_end];
 
-        assert_eq!(orig_payload, new_payload, "payload bytes must be identical after rewrap");
+        assert_eq!(
+            orig_payload, new_payload,
+            "payload bytes must be identical after rewrap"
+        );
     }
 
     #[test]
-    fn rewrap_preserves_metadata_bytes() {
+    fn rewrap_preserves_metadata_content() {
+        // After rewrap the raw metadata bytes change (ciphertext re-keyed to new header_hash),
+        // but the decrypted content must remain identical.
+        use crate::crypto::kdf::{derive_root_key, derive_subkeys};
+        use crate::crypto::metadata::decrypt_metadata;
+
         let fmk = test_fmk();
         let uuid = test_file_uuid();
         let container = build_test_container(&fmk, &uuid);
-
-        let orig_fh = FixedHeader::parse(&container[..FIXED_HEADER_LEN]).unwrap();
-        let orig_meta_start = FIXED_HEADER_LEN
-            + orig_fh.policy_len as usize
-            + orig_fh.wraps_len as usize;
-        let orig_meta = &container[orig_meta_start..orig_meta_start + orig_fh.metadata_len as usize];
 
         let new_policy = PolicySection {
             policy_version: 1,
@@ -616,12 +686,42 @@ mod tests {
         let new_wrappers = vec![dummy_wrapper_entry(b"eve", 94)];
         let result = rewrap_container(&container, &fmk, &uuid, new_policy, new_wrappers).unwrap();
 
+        // Verify raw bytes differ (re-encrypted under new header_hash).
+        let orig_fh = FixedHeader::parse(&container[..FIXED_HEADER_LEN]).unwrap();
+        let orig_meta_start =
+            FIXED_HEADER_LEN + orig_fh.policy_len as usize + orig_fh.wraps_len as usize;
+        let orig_meta =
+            &container[orig_meta_start..orig_meta_start + orig_fh.metadata_len as usize];
+
         let new_fh = FixedHeader::parse(&result[..FIXED_HEADER_LEN]).unwrap();
         let new_meta_start =
             FIXED_HEADER_LEN + new_fh.policy_len as usize + new_fh.wraps_len as usize;
         let new_meta = &result[new_meta_start..new_meta_start + new_fh.metadata_len as usize];
 
-        assert_eq!(orig_meta, new_meta, "metadata bytes must be identical after rewrap");
+        assert_ne!(
+            orig_meta, new_meta,
+            "metadata bytes must differ after rewrap (re-encrypted)"
+        );
+        assert_eq!(
+            orig_fh.metadata_len, new_fh.metadata_len,
+            "metadata_len must stay the same"
+        );
+
+        // Verify decrypted content is the same.
+        let root_key = derive_root_key(&fmk, &uuid);
+        let subkeys = derive_subkeys(&root_key);
+        let k_control = SecretKey32::from_bytes(*subkeys.k_control.expose());
+
+        let orig_hash: [u8; 32] = *blake3::hash(&container[..FIXED_HEADER_LEN]).as_bytes();
+        let orig_plain =
+            decrypt_metadata(&k_control, orig_meta, &uuid, 0x0001, &orig_hash).unwrap();
+
+        let new_hash: [u8; 32] = *blake3::hash(&result[..FIXED_HEADER_LEN]).as_bytes();
+        let new_plain = decrypt_metadata(&k_control, new_meta, &uuid, 0x0001, &new_hash).unwrap();
+
+        assert_eq!(orig_plain.plaintext_size, new_plain.plaintext_size);
+        assert_eq!(orig_plain.logical_name, new_plain.logical_name);
+        assert_eq!(orig_plain.chunk_size, new_plain.chunk_size);
     }
 
     #[test]
@@ -646,8 +746,7 @@ mod tests {
         let orig_footer = FooterSection::parse(&container[orig_footer_start..]).unwrap();
 
         let new_fh = FixedHeader::parse(&result[..FIXED_HEADER_LEN]).unwrap();
-        let new_footer_start =
-            scan_payload_end(&result, new_fh.payload_offset as usize).unwrap();
+        let new_footer_start = scan_payload_end(&result, new_fh.payload_offset as usize).unwrap();
         let new_footer = FooterSection::parse(&result[new_footer_start..]).unwrap();
 
         assert_eq!(
@@ -754,7 +853,10 @@ mod tests {
         let err = rewrap_container(&container, &fmk, &uuid, new_policy, new_wrappers).unwrap_err();
         assert!(matches!(
             err,
-            RewrapError::PolicyMismatch { wrapper_count: 2, total_shares: 3 }
+            RewrapError::PolicyMismatch {
+                wrapper_count: 2,
+                total_shares: 3
+            }
         ));
     }
 
@@ -768,8 +870,7 @@ mod tests {
             total_shares: 1,
             wrapper_count: 1,
         };
-        let err =
-            rewrap_container(&[0u8; 10], &fmk, &uuid, new_policy, vec![]).unwrap_err();
+        let err = rewrap_container(&[0u8; 10], &fmk, &uuid, new_policy, vec![]).unwrap_err();
         assert!(matches!(err, RewrapError::ContainerTooShort));
     }
 
@@ -791,8 +892,7 @@ mod tests {
         // Since §18: rewrap now verifies the original footer auth_tag before rewriting.
         // Passing a wrong FMK causes the original verification to fail immediately.
         let err =
-            rewrap_container(&container, &wrong_fmk, &uuid, new_policy, new_wrappers)
-                .unwrap_err();
+            rewrap_container(&container, &wrong_fmk, &uuid, new_policy, new_wrappers).unwrap_err();
 
         assert!(
             matches!(err, RewrapError::InvalidOriginalContainer),

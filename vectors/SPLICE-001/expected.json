@@ -1,0 +1,10 @@
+{
+  "case_id": "SPLICE-001",
+  "error": {
+    "code": "VerifyFailed"
+  },
+  "expect": "reject",
+  "notes": "payload bytes from container B spliced into container A; footer auth_tag mismatch",
+  "operation": "decrypt",
+  "version": "1"
+}

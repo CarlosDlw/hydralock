@@ -1,38 +1,38 @@
-/// Threshold (Shamir Secret Sharing) wrapper for HydraLock v1.
-///
-/// Splits the File Master Key (or any 32-byte secret) into `n` shares such
-/// that any `t` of them reconstruct the original. Each share is wrapped
-/// individually using AES-256-GCM-SIV, binding it to:
-///   - the share's position (share_index) and threshold parameters (t, n)
-///   - the wrapper type id and wrapper context (suite_id, file_uuid, header_hash)
-///   - the share's unique id (x-coordinate in GF(256))
-///
-/// This prevents:
-///   - share swapping attacks (different share_index in AAD)
-///   - cross-file attacks (file_uuid and header_hash in AAD)
-///   - threshold downgrade attacks (t and n in AAD)
-///
-/// Each share KEK is derived from a caller-supplied `k_share_root` via
-/// HKDF-SHA-512 domain-separated by the share id:
-///   KEK_i = HKDF-SHA-512(
-///       ikm  = k_share_root,
-///       salt = [],
-///       info = "hydralock:v1:share-kek:" || share_id_byte,
-///   ) → 32 bytes
-///
-/// Wire format per share stanza (76 bytes):
-///   Offset  Size  Field
-///   0       2     stanza_version (u16 = 1, big-endian)
-///   2       1     share_id       (GF(256) x-coordinate, 1..=255)
-///   3       1     threshold_t    (minimum shares to reconstruct)
-///   4       1     total_n        (total share count at split time)
-///   5       12    wrap_nonce
-///   17      48    wrapped_share  (32B share value + 16B AES-GCM-SIV tag, no nonce prefix)
-///   Total: 65 bytes
-///
-/// Note: the `k_share_root` is a share-split-level key — the caller is
-/// responsible for how it is established. Typically it is either the FMK
-/// itself (if threshold is the sole access mechanism) or a derived key.
+//! Threshold (Shamir Secret Sharing) wrapper for HydraLock v1.
+//!
+//! Splits the File Master Key (or any 32-byte secret) into `n` shares such
+//! that any `t` of them reconstruct the original. Each share is wrapped
+//! individually using AES-256-GCM-SIV, binding it to:
+//!   - the share's position (share_index) and threshold parameters (t, n)
+//!   - the wrapper type id and wrapper context (suite_id, file_uuid, header_hash)
+//!   - the share's unique id (x-coordinate in GF(256))
+//!
+//! This prevents:
+//!   - share swapping attacks (different share_index in AAD)
+//!   - cross-file attacks (file_uuid and header_hash in AAD)
+//!   - threshold downgrade attacks (t and n in AAD)
+//!
+//! Each share KEK is derived from a caller-supplied `k_share_root` via
+//! HKDF-SHA-512 domain-separated by the share id:
+//!   KEK_i = HKDF-SHA-512(
+//!       ikm  = k_share_root,
+//!       salt = [],
+//!       info = "hydralock:v1:share-kek:" || share_id_byte,
+//!   ) → 32 bytes
+//!
+//! Wire format per share stanza (76 bytes):
+//!   Offset  Size  Field
+//!   0       2     stanza_version (u16 = 1, big-endian)
+//!   2       1     share_id       (GF(256) x-coordinate, 1..=255)
+//!   3       1     threshold_t    (minimum shares to reconstruct)
+//!   4       1     total_n        (total share count at split time)
+//!   5       12    wrap_nonce
+//!   17      48    wrapped_share  (32B share value + 16B AES-GCM-SIV tag, no nonce prefix)
+//!   Total: 65 bytes
+//!
+//! Note: the `k_share_root` is a share-split-level key — the caller is
+//! responsible for how it is established. Typically it is either the FMK
+//! itself (if threshold is the sole access mechanism) or a derived key.
 
 use hkdf::Hkdf;
 use rand::RngCore;
@@ -42,7 +42,9 @@ use zeroize::Zeroizing;
 use crate::crypto::password::Kek;
 use crate::crypto::secret::SecretKey32;
 use crate::crypto::shamir::{ShamirError, ShamirShare, combine, split};
-use crate::crypto::wrap::{AES_GCM_SIV_NONCE_LEN, WRAPPED_KEY_LEN, WrapError, unwrap_key, wrap_key};
+use crate::crypto::wrap::{
+    AES_GCM_SIV_NONCE_LEN, WRAPPED_KEY_LEN, WrapError, unwrap_key, wrap_key,
+};
 
 /// Stanza type identifier for the threshold wrapper.
 pub const WRAPPER_TYPE_THRESHOLD: u16 = 0x0004;
@@ -96,16 +98,25 @@ impl core::fmt::Display for ThresholdError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::InvalidLength { expected, actual } => {
-                write!(f, "invalid stanza length: expected {expected}, got {actual}")
+                write!(
+                    f,
+                    "invalid stanza length: expected {expected}, got {actual}"
+                )
             }
             Self::UnsupportedStanzaVersion { expected, actual } => {
-                write!(f, "unsupported stanza version: expected {expected}, got {actual}")
+                write!(
+                    f,
+                    "unsupported stanza version: expected {expected}, got {actual}"
+                )
             }
             Self::Shamir(e) => write!(f, "Shamir error: {e}"),
             Self::WrapFailed => write!(f, "threshold share wrapping failed"),
             Self::UnwrapFailed => write!(f, "threshold share unwrapping failed"),
             Self::InconsistentParameters => {
-                write!(f, "share stanzas have inconsistent threshold/total parameters")
+                write!(
+                    f,
+                    "share stanzas have inconsistent threshold/total parameters"
+                )
             }
         }
     }
@@ -157,12 +168,21 @@ impl ShareStanza {
         let total_n = bytes[TOTAL_N_OFFSET];
 
         let mut wrap_nonce = [0u8; AES_GCM_SIV_NONCE_LEN];
-        wrap_nonce.copy_from_slice(&bytes[WRAP_NONCE_OFFSET..WRAP_NONCE_OFFSET + AES_GCM_SIV_NONCE_LEN]);
+        wrap_nonce
+            .copy_from_slice(&bytes[WRAP_NONCE_OFFSET..WRAP_NONCE_OFFSET + AES_GCM_SIV_NONCE_LEN]);
 
         let mut wrapped_share = [0u8; WRAPPED_SHARE_BODY_LEN];
-        wrapped_share.copy_from_slice(&bytes[WRAPPED_SHARE_OFFSET..WRAPPED_SHARE_OFFSET + WRAPPED_SHARE_BODY_LEN]);
+        wrapped_share.copy_from_slice(
+            &bytes[WRAPPED_SHARE_OFFSET..WRAPPED_SHARE_OFFSET + WRAPPED_SHARE_BODY_LEN],
+        );
 
-        Ok(Self { share_id, threshold_t, total_n, wrap_nonce, wrapped_share })
+        Ok(Self {
+            share_id,
+            threshold_t,
+            total_n,
+            wrap_nonce,
+            wrapped_share,
+        })
     }
 
     /// Encode this stanza into its canonical 65-byte binary representation.
@@ -256,7 +276,10 @@ pub fn open(
     aad: &[u8],
 ) -> Result<SecretKey32, ThresholdError> {
     if stanzas.is_empty() {
-        return Err(ThresholdError::Shamir(ShamirError::NotEnoughShares { got: 0, need: 1 }));
+        return Err(ThresholdError::Shamir(ShamirError::NotEnoughShares {
+            got: 0,
+            need: 1,
+        }));
     }
 
     // Validate parameter consistency across all stanzas.
@@ -285,13 +308,15 @@ pub fn open(
         wrapped_full[..AES_GCM_SIV_NONCE_LEN].copy_from_slice(&stanza.wrap_nonce);
         wrapped_full[AES_GCM_SIV_NONCE_LEN..].copy_from_slice(&stanza.wrapped_share);
 
-        let share_secret = unwrap_key(&kek, &wrapped_full, &share_aad)
-            .map_err(|e| match e {
-                WrapError::DecryptFailed => ThresholdError::UnwrapFailed,
-                _ => ThresholdError::WrapFailed,
-            })?;
+        let share_secret = unwrap_key(&kek, &wrapped_full, &share_aad).map_err(|e| match e {
+            WrapError::DecryptFailed => ThresholdError::UnwrapFailed,
+            _ => ThresholdError::WrapFailed,
+        })?;
 
-        shamir_shares.push(ShamirShare { id: stanza.share_id, value: *share_secret.expose() });
+        shamir_shares.push(ShamirShare {
+            id: stanza.share_id,
+            value: *share_secret.expose(),
+        });
     }
 
     let reconstructed = combine(&shamir_shares, t)?;
@@ -367,9 +392,24 @@ mod tests {
         let stanzas = seal(&test_secret(), 2, 3, &test_root(), &test_aad(), &mut rng).unwrap();
         assert_eq!(stanzas.len(), 3);
 
-        let r01 = open(&[stanzas[0].clone(), stanzas[1].clone()], &test_root(), &test_aad()).unwrap();
-        let r02 = open(&[stanzas[0].clone(), stanzas[2].clone()], &test_root(), &test_aad()).unwrap();
-        let r12 = open(&[stanzas[1].clone(), stanzas[2].clone()], &test_root(), &test_aad()).unwrap();
+        let r01 = open(
+            &[stanzas[0].clone(), stanzas[1].clone()],
+            &test_root(),
+            &test_aad(),
+        )
+        .unwrap();
+        let r02 = open(
+            &[stanzas[0].clone(), stanzas[2].clone()],
+            &test_root(),
+            &test_aad(),
+        )
+        .unwrap();
+        let r12 = open(
+            &[stanzas[1].clone(), stanzas[2].clone()],
+            &test_root(),
+            &test_aad(),
+        )
+        .unwrap();
         assert_eq!(r01.expose(), test_secret().expose());
         assert_eq!(r02.expose(), test_secret().expose());
         assert_eq!(r12.expose(), test_secret().expose());
@@ -381,11 +421,26 @@ mod tests {
         let mut rng = seeded_rng();
         let stanzas = seal(&secret, 3, 5, &test_root(), &test_aad(), &mut rng).unwrap();
 
-        let r = open(&[stanzas[0].clone(), stanzas[1].clone(), stanzas[2].clone()], &test_root(), &test_aad()).unwrap();
+        let r = open(
+            &[stanzas[0].clone(), stanzas[1].clone(), stanzas[2].clone()],
+            &test_root(),
+            &test_aad(),
+        )
+        .unwrap();
         assert_eq!(r.expose(), secret.expose());
-        let r = open(&[stanzas[1].clone(), stanzas[3].clone(), stanzas[4].clone()], &test_root(), &test_aad()).unwrap();
+        let r = open(
+            &[stanzas[1].clone(), stanzas[3].clone(), stanzas[4].clone()],
+            &test_root(),
+            &test_aad(),
+        )
+        .unwrap();
         assert_eq!(r.expose(), secret.expose());
-        let r = open(&[stanzas[0].clone(), stanzas[2].clone(), stanzas[4].clone()], &test_root(), &test_aad()).unwrap();
+        let r = open(
+            &[stanzas[0].clone(), stanzas[2].clone(), stanzas[4].clone()],
+            &test_root(),
+            &test_aad(),
+        )
+        .unwrap();
         assert_eq!(r.expose(), secret.expose());
     }
 
@@ -394,7 +449,10 @@ mod tests {
         let mut rng = seeded_rng();
         let stanzas = seal(&test_secret(), 3, 5, &test_root(), &test_aad(), &mut rng).unwrap();
         let err = open(&stanzas[..2], &test_root(), &test_aad()).unwrap_err();
-        assert!(matches!(err, ThresholdError::Shamir(ShamirError::NotEnoughShares { got: 2, need: 3 })));
+        assert!(matches!(
+            err,
+            ThresholdError::Shamir(ShamirError::NotEnoughShares { got: 2, need: 3 })
+        ));
     }
 
     #[test]
@@ -452,7 +510,13 @@ mod tests {
     #[test]
     fn parse_rejects_wrong_length() {
         let err = ShareStanza::parse(&[0u8; SHARE_STANZA_LEN - 1]).unwrap_err();
-        assert!(matches!(err, ThresholdError::InvalidLength { expected: SHARE_STANZA_LEN, actual: _ }));
+        assert!(matches!(
+            err,
+            ThresholdError::InvalidLength {
+                expected: SHARE_STANZA_LEN,
+                actual: _
+            }
+        ));
     }
 
     #[test]
@@ -460,7 +524,13 @@ mod tests {
         let mut bytes = [0u8; SHARE_STANZA_LEN];
         bytes[0..2].copy_from_slice(&9u16.to_be_bytes());
         let err = ShareStanza::parse(&bytes).unwrap_err();
-        assert!(matches!(err, ThresholdError::UnsupportedStanzaVersion { expected: 1, actual: 9 }));
+        assert!(matches!(
+            err,
+            ThresholdError::UnsupportedStanzaVersion {
+                expected: 1,
+                actual: 9
+            }
+        ));
     }
 
     #[test]

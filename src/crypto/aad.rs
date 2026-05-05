@@ -163,8 +163,10 @@ mod tests {
     use super::*;
 
     fn test_uuid() -> [u8; 16] {
-        [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-         0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10]
+        [
+            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E,
+            0x0F, 0x10,
+        ]
     }
 
     fn test_hash() -> [u8; 32] {
@@ -239,8 +241,14 @@ mod tests {
             plaintext_chunk_len: 65536,
             is_final: false,
         };
-        let diff_epoch = ChunkAadInput { epoch_index: 1, ..base };
-        let diff_chunk = ChunkAadInput { chunk_index: 1, ..base };
+        let diff_epoch = ChunkAadInput {
+            epoch_index: 1,
+            ..base
+        };
+        let diff_chunk = ChunkAadInput {
+            chunk_index: 1,
+            ..base
+        };
         assert_ne!(base.encode(), diff_epoch.encode());
         assert_ne!(base.encode(), diff_chunk.encode());
         assert_ne!(diff_epoch.encode(), diff_chunk.encode());
@@ -266,7 +274,10 @@ mod tests {
             file_uuid: test_uuid(),
             header_hash: test_hash(),
         };
-        let other = WrapperAadInput { wrapper_index: 1, ..base };
+        let other = WrapperAadInput {
+            wrapper_index: 1,
+            ..base
+        };
         assert_ne!(base.encode(), other.encode());
         assert_eq!(base.encode()[2], SECTION_TYPE_WRAP);
     }

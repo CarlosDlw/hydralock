@@ -1,0 +1,7 @@
+{
+  "k_share_root_hex": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "note": "provide any 2 of 3 THRESHOLD stanzas to reconstruct FMK",
+  "threshold_t": 2,
+  "total_n": 3,
+  "wrapper_type": "Threshold"
+}

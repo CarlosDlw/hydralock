@@ -1,0 +1,7 @@
+{
+  "chunk_size": 64,
+  "epoch_size": 2,
+  "passphrase_hex": "68796472616c6f636b2d746573742d70617373",
+  "wrapper_id_label": "pass",
+  "wrapper_type": "PassArgon2id"
+}

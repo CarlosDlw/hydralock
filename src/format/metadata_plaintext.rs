@@ -1,19 +1,19 @@
-/// Metadata plaintext structure — internal, encrypted contents.
-///
-/// Serialized as CBOR canonical array to ensure deterministic encoding.
-/// All fields MUST be present in the exact order specified.
-///
-/// Array layout:
-///   [0] plaintext_size: u64
-///   [1] logical_name: text string | null (optional)
-///   [2] mime_type: text string | null (optional)
-///   [3] created_at: i64 | null (optional, Unix timestamp)
-///   [4] chunk_size: u32
-///   [5] epoch_size: u32
-///   [6] manifest_root: byte string (32 bytes)
-///   [7] payload_mode: u8
-///   [8] padding_bucket: array [type, value?]
-///   [9] reserved: 4 zero bytes (future extensibility)
+//! Metadata plaintext structure — internal, encrypted contents.
+//!
+//! Serialized as CBOR canonical array to ensure deterministic encoding.
+//! All fields MUST be present in the exact order specified.
+//!
+//! Array layout:
+//!   [0] plaintext_size: u64
+//!   [1] logical_name: text string | null (optional)
+//!   [2] mime_type: text string | null (optional)
+//!   [3] created_at: i64 | null (optional, Unix timestamp)
+//!   [4] chunk_size: u32
+//!   [5] epoch_size: u32
+//!   [6] manifest_root: byte string (32 bytes)
+//!   [7] payload_mode: u8
+//!   [8] padding_bucket: array [type, value?]
+//!   [9] reserved: 4 zero bytes (future extensibility)
 
 use serde::{Deserialize, Serialize};
 
@@ -102,11 +102,16 @@ impl MetadataPlaintext {
 
         let array = ciborium::Value::Array(vec![
             ciborium::Value::Integer((self.plaintext_size as i64).into()),
-            self.logical_name.as_ref().map(|s| ciborium::Value::Text(s.clone()))
+            self.logical_name
+                .as_ref()
+                .map(|s| ciborium::Value::Text(s.clone()))
                 .unwrap_or(ciborium::Value::Null),
-            self.mime_type.as_ref().map(|s| ciborium::Value::Text(s.clone()))
+            self.mime_type
+                .as_ref()
+                .map(|s| ciborium::Value::Text(s.clone()))
                 .unwrap_or(ciborium::Value::Null),
-            self.created_at.map(|t| ciborium::Value::Integer((t as i64).into()))
+            self.created_at
+                .map(|t| ciborium::Value::Integer(t.into()))
                 .unwrap_or(ciborium::Value::Null),
             ciborium::Value::Integer((self.chunk_size as i64).into()),
             ciborium::Value::Integer((self.epoch_size as i64).into()),
@@ -117,8 +122,7 @@ impl MetadataPlaintext {
         ]);
 
         let mut buf = Vec::new();
-        ciborium::ser::into_writer(&array, &mut buf)
-            .map_err(|_| MetadataError::EncodingFailed)?;
+        ciborium::ser::into_writer(&array, &mut buf).map_err(|_| MetadataError::EncodingFailed)?;
         Ok(buf)
     }
 

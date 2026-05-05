@@ -34,16 +34,25 @@ impl fmt::Display for WrapsSectionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidLength { min, actual } => {
-                write!(f, "invalid wraps section length: expected at least {min}, got {actual}")
+                write!(
+                    f,
+                    "invalid wraps section length: expected at least {min}, got {actual}"
+                )
             }
             Self::UnsupportedWrapsVersion { expected, actual } => {
-                write!(f, "unsupported wraps version: expected {expected}, got {actual}")
+                write!(
+                    f,
+                    "unsupported wraps version: expected {expected}, got {actual}"
+                )
             }
             Self::TruncatedEntryHeader { index } => {
                 write!(f, "truncated wrapper entry header at index {index}")
             }
             Self::TruncatedField { index, field } => {
-                write!(f, "truncated field '{field}' in wrapper entry at index {index}")
+                write!(
+                    f,
+                    "truncated field '{field}' in wrapper entry at index {index}"
+                )
             }
             Self::InvalidWrapperCount { declared, actual } => write!(
                 f,
@@ -174,10 +183,10 @@ impl WrapsSection {
                 return Err(WrapsSectionError::DuplicateWrapperId);
             }
 
-            let wrapper_id_len =
-                u16::try_from(wrapper.wrapper_id.len()).map_err(|_| WrapsSectionError::LengthOverflow)?;
-            let stanza_len =
-                u16::try_from(wrapper.stanza.len()).map_err(|_| WrapsSectionError::LengthOverflow)?;
+            let wrapper_id_len = u16::try_from(wrapper.wrapper_id.len())
+                .map_err(|_| WrapsSectionError::LengthOverflow)?;
+            let stanza_len = u16::try_from(wrapper.stanza.len())
+                .map_err(|_| WrapsSectionError::LengthOverflow)?;
 
             out.extend_from_slice(&wrapper.wrapper_type.to_be_bytes());
             out.extend_from_slice(&wrapper.wrapper_flags.to_be_bytes());
@@ -193,7 +202,7 @@ impl WrapsSection {
 
 #[cfg(test)]
 mod tests {
-    use super::{WrapsSection, WrapsSectionError, WrapperEntry};
+    use super::{WrapperEntry, WrapsSection, WrapsSectionError};
 
     fn sample_wraps() -> WrapsSection {
         WrapsSection {

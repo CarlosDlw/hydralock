@@ -1,0 +1,10 @@
+{
+  "case_id": "CHUNK-CORRUPT-001",
+  "error": {
+    "code": "VerifyFailed"
+  },
+  "expect": "reject",
+  "notes": "byte at first chunk ciphertext offset 336 XOR'd with 0xFF",
+  "operation": "decrypt",
+  "version": "1"
+}

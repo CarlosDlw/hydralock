@@ -1,7 +1,7 @@
 use hkdf::Hkdf;
 use sha2::Sha512;
 
-use crate::crypto::secret::{fmk_expose, Fmk, SecretKey32, SecretNonce24, SubkeySet};
+use crate::crypto::secret::{Fmk, SecretKey32, SecretNonce24, SubkeySet, fmk_expose};
 
 // ── KDF labels ──────────────────────────────────────────────────────────────
 //
@@ -119,8 +119,10 @@ mod tests {
     }
 
     fn test_uuid() -> [u8; 16] {
-        [0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x01, 0x02, 0x03,
-         0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B]
+        [
+            0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
+            0x0A, 0x0B,
+        ]
     }
 
     #[test]

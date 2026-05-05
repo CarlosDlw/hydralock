@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::cli::args::DecryptArgs;
 use crate::cli::keys::load_secret_key_material;
@@ -35,7 +35,7 @@ pub fn run(args: DecryptArgs) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn check_output(path: &PathBuf, force: bool) -> anyhow::Result<()> {
+fn check_output(path: &Path, force: bool) -> anyhow::Result<()> {
     if path.exists() && !force {
         anyhow::bail!(
             "output file '{}' already exists — use --force to overwrite",
@@ -49,7 +49,6 @@ fn write_output(path: &PathBuf, data: &[u8]) -> anyhow::Result<()> {
     let tmp = path.with_extension("tmp");
     std::fs::write(&tmp, data)
         .map_err(|e| anyhow::anyhow!("failed to write temp file '{}': {e}", tmp.display()))?;
-    std::fs::rename(&tmp, path)
-        .map_err(|e| anyhow::anyhow!("failed to rename temp file: {e}"))?;
+    std::fs::rename(&tmp, path).map_err(|e| anyhow::anyhow!("failed to rename temp file: {e}"))?;
     Ok(())
 }
