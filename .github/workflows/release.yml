@@ -13,7 +13,7 @@ env:
 
 jobs:
   build:
-    name: Build ${{ matrix.target }}
+    name: Build ${{ matrix.asset_id }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -21,9 +21,11 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+            asset_id: linux-x86_64-gnu
             archive_ext: tar.gz
           - os: windows-latest
             target: x86_64-pc-windows-msvc
+            asset_id: windows-x86_64-msvc
             archive_ext: zip
 
     steps:
@@ -43,7 +45,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          asset_name="${BIN_NAME}-${GITHUB_REF_NAME}-${{ matrix.target }}.${{ matrix.archive_ext }}"
+          asset_name="${BIN_NAME}-${GITHUB_REF_NAME}-${{ matrix.asset_id }}.${{ matrix.archive_ext }}"
           mkdir -p dist
           cp "target/${{ matrix.target }}/release/${BIN_NAME}" dist/
           cp README.md LICENSE dist/
@@ -54,7 +56,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $assetName = "$env:BIN_NAME-$env:GITHUB_REF_NAME-${{ matrix.target }}.${{ matrix.archive_ext }}"
+          $assetName = "$env:BIN_NAME-$env:GITHUB_REF_NAME-${{ matrix.asset_id }}.${{ matrix.archive_ext }}"
           New-Item -ItemType Directory -Force dist | Out-Null
           Copy-Item "target/${{ matrix.target }}/release/$env:BIN_NAME.exe" "dist/"
           Copy-Item "README.md","LICENSE" "dist/"
@@ -82,6 +84,28 @@ jobs:
         with:
           path: release-assets
           merge-multiple: true
+
+      - name: Remove existing assets for this tag
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tag = context.ref.replace('refs/tags/', '');
+            try {
+              const { data: release } = await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag,
+              });
+              for (const asset of release.assets) {
+                await github.rest.repos.deleteReleaseAsset({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  asset_id: asset.id,
+                });
+              }
+            } catch (e) {
+              if (e.status !== 404) throw e;
+            }
 
       - name: Create GitHub Release and upload assets
         uses: softprops/action-gh-release@v2
