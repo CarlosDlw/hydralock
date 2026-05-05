@@ -1,0 +1,1 @@
+Valid footer section with version 1, zeroed reserved bytes, manifest_root and auth_tag.

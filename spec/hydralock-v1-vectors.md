@@ -12,6 +12,7 @@ Initial scope of this draft:
 - policy-section vectors;
 - wraps-section vectors;
 - metadata-section vectors;
+- footer-section vectors;
 - acceptance and rejection cases;
 - distribution pattern for implementations in different languages.
 
@@ -321,7 +322,98 @@ Expected result:
 - `reject`
 - `error.code = InvalidCiphertextLength`
 
-## 8. Case naming
+## 8. Initial minimum set (footer section)
+
+### 8.1 Case FOOTER-ACCEPT-001
+
+Description:
+
+- valid footer section with version 1, zeroed reserved bytes, non-empty manifest_root and auth_tag.
+
+Operation:
+
+- `parse_footer_section`
+
+Expected result:
+
+- `accept`
+
+### 8.2 Case FOOTER-REJECT-001
+
+Description:
+
+- footer section with unsupported footer version.
+
+Operation:
+
+- `parse_footer_section`
+
+Expected result:
+
+- `reject`
+- `error.code = UnsupportedFooterVersion`
+
+### 8.3 Case FOOTER-REJECT-002
+
+Description:
+
+- footer section with non-zero reserved bytes.
+
+Operation:
+
+- `parse_footer_section`
+
+Expected result:
+
+- `reject`
+- `error.code = NonZeroReserved`
+
+### 8.4 Case FOOTER-REJECT-003
+
+Description:
+
+- footer section with truncated auth_tag bytes.
+
+Operation:
+
+- `parse_footer_section`
+
+Expected result:
+
+- `reject`
+- `error.code = TruncatedAuthTag`
+
+### 8.5 Case FOOTER-REJECT-004
+
+Description:
+
+- footer section with empty manifest_root declaration.
+
+Operation:
+
+- `parse_footer_section`
+
+Expected result:
+
+- `reject`
+- `error.code = EmptyManifestRoot`
+
+### 8.6 Case FOOTER-REJECT-005
+
+Description:
+
+- footer section with trailing bytes after declared lengths.
+
+Operation:
+
+- `parse_footer_section`
+
+Expected result:
+
+- `reject`
+- `error.code = InvalidFooterLength`
+
+## 9. Case naming
 
 Pattern:
 
@@ -334,7 +426,7 @@ Examples:
 - `WRAP-ACCEPT-003`
 - `PAYLOAD-REJECT-010`
 
-## 9. Conformance rules
+## 10. Conformance rules
 
 For fixed header, an implementation is conformant when it:
 
@@ -360,11 +452,17 @@ For metadata section, an implementation is conformant when it:
 - rejects all `METADATA-REJECT-*` cases;
 - returns an error consistent with the expected category.
 
-## 10. Open items
+For footer section, an implementation is conformant when it:
+
+- accepts all `FOOTER-ACCEPT-*` cases;
+- rejects all `FOOTER-REJECT-*` cases;
+- returns an error consistent with the expected category.
+
+## 11. Open items
 
 This draft still needs:
 
-- payload/manifest/footer vectors;
+- payload/manifest vectors;
 - corruption and downgrade vectors;
 - password mode and asymmetric wrapper vectors;
 - `2-of-3` threshold vectors;

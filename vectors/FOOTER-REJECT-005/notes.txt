@@ -1,0 +1,1 @@
+Section has trailing bytes after declared manifest_root and auth_tag lengths.

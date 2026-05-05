@@ -280,18 +280,74 @@ Current reference implementation:
     - `InvalidCiphertextLength`
     - `LengthOverflow`
 
-  ## 12. Open items to finalize v1
+  ## 12. Footer Section (normative, initial)
+
+  ### 12.1 Layout
+
+  The footer section has a 12-byte fixed header followed by two variable-size
+  fields.
+
+  Footer section header:
+
+  ```text
+  Offset  Size  Field
+  0       2     footer_version (u16)
+  2       2     flags (u16)
+  4       2     manifest_root_len (u16)
+  6       2     auth_tag_len (u16)
+  8       4     reserved (bytes)
+  12      N     manifest_root bytes
+  12+N    M     auth_tag bytes
+  ```
+
+  ### 12.2 Mandatory rules
+
+  - `footer_version` MUST be `1` in v1.
+  - `reserved` MUST contain only zero bytes.
+  - `manifest_root_len` MUST be greater than zero.
+  - `auth_tag_len` MUST be greater than zero.
+  - Parser MUST consume the section exactly, with no trailing bytes.
+
+  ### 12.3 Mandatory parser errors
+
+  Implementations MUST reject:
+
+  - unsupported `footer_version`;
+  - non-zero `reserved` bytes;
+  - `manifest_root_len == 0`;
+  - `auth_tag_len == 0`;
+  - truncated `manifest_root` or truncated `auth_tag` bytes;
+  - section with trailing bytes after declared lengths.
+
+  ### 12.4 Rust reference mapping
+
+  Current reference implementation:
+
+  - file: `src/format/footer.rs`
+  - constants:
+    - `FOOTER_HEADER_LEN = 12`
+  - errors:
+    - `InvalidLength`
+    - `UnsupportedFooterVersion`
+    - `NonZeroReserved`
+    - `EmptyManifestRoot`
+    - `EmptyAuthTag`
+    - `TruncatedField`
+    - `InvalidFooterLength`
+    - `LengthOverflow`
+
+  ## 13. Open items to finalize v1
 
 This draft does not yet finalize:
 
-- byte-level definition of payload and footer;
+- byte-level definition of payload;
 - final extensibility rules;
 - complete normative algorithms for encrypt/decrypt/verify/rewrap;
 - final full suite and wrapper definitions.
 
-## 13. Immediate next steps
+## 14. Immediate next steps
 
 1. Define header-to-section offset invariants across all sections.
-2. Extend vectors specification with footer corruption cases.
-3. Freeze footer section fields and validations.
+2. Extend vectors specification with payload corruption cases.
+3. Freeze payload section fields and validations.
 4. Define metadata canonical plaintext layout and AAD binding.

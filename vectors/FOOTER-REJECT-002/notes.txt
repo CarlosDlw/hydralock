@@ -1,0 +1,1 @@
+Reserved footer bytes must be zero.

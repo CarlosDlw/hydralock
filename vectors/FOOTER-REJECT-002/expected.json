@@ -1,0 +1,9 @@
+{
+  "case_id": "FOOTER-REJECT-002",
+  "version": "1",
+  "operation": "parse_footer_section",
+  "expect": "reject",
+  "error": {
+    "code": "NonZeroReserved"
+  }
+}

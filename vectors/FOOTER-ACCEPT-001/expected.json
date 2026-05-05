@@ -1,0 +1,12 @@
+{
+  "case_id": "FOOTER-ACCEPT-001",
+  "version": "1",
+  "operation": "parse_footer_section",
+  "expect": "accept",
+  "parsed": {
+    "footer_version": 1,
+    "flags": 0,
+    "manifest_root_len": 4,
+    "auth_tag_len": 16
+  }
+}

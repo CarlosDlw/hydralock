@@ -1,0 +1,9 @@
+{
+  "case_id": "FOOTER-REJECT-004",
+  "version": "1",
+  "operation": "parse_footer_section",
+  "expect": "reject",
+  "error": {
+    "code": "EmptyManifestRoot"
+  }
+}
