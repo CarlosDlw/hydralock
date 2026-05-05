@@ -1,0 +1,40 @@
+[package]
+name = "hydralock-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+hydralock = { path = ".." }
+
+[[bin]]
+name = "fixed_header_parser"
+path = "fuzz_targets/fixed_header_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "container_parser"
+path = "fuzz_targets/container_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "metadata_decoder"
+path = "fuzz_targets/metadata_decoder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "payload_decoder"
+path = "fuzz_targets/payload_decoder.rs"
+test = false
+doc = false
+bench = false

@@ -1,5 +1,7 @@
 # Ignore build artifacts and other generated files
 /target
+/fuzz/target
+/fuzz/artifacts
 
 # Implementation-specific and plan files
 PLAN.md

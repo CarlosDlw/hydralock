@@ -573,6 +573,36 @@ hydralock test-vectors
 
 Runs three encrypt → decrypt roundtrips covering all three wrapper types (passphrase, X25519, ML-KEM-768+X25519) and verifies plaintext equality end-to-end.
 
+### Fuzzing
+
+HydraLock ships a dedicated `cargo-fuzz` harness under `fuzz/` with these targets:
+
+- `fixed_header_parser`
+- `container_parser`
+- `metadata_decoder`
+- `payload_decoder`
+
+Initial regression corpus is versioned under `fuzz/corpus/<target>/` and seeded from official vectors.
+
+Requirements:
+
+- `cargo-fuzz`
+- Rust nightly toolchain (ASan-based libFuzzer runs)
+
+```sh
+cargo install cargo-fuzz
+rustup toolchain install nightly
+```
+
+Run a quick smoke campaign for all targets:
+
+```sh
+cargo +nightly fuzz run fixed_header_parser fuzz/corpus/fixed_header_parser -- -max_total_time=10
+cargo +nightly fuzz run container_parser fuzz/corpus/container_parser -- -max_total_time=10
+cargo +nightly fuzz run metadata_decoder fuzz/corpus/metadata_decoder -- -max_total_time=10
+cargo +nightly fuzz run payload_decoder fuzz/corpus/payload_decoder -- -max_total_time=10
+```
+
 ---
 
 ## 12. Roadmap
