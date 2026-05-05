@@ -1,0 +1,10 @@
+{
+  "case_id": "METADATA-ACCEPT-001",
+  "version": "1",
+  "operation": "parse_metadata_section",
+  "expect": "accept",
+  "parsed": {
+    "metadata_version": 1,
+    "ciphertext_len": 3
+  }
+}

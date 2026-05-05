@@ -1,0 +1,1 @@
+Valid metadata section with version 1, reserved bytes set to zero, and 3-byte ciphertext.

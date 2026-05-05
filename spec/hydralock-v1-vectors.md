@@ -11,6 +11,7 @@ Initial scope of this draft:
 - fixed-header vectors;
 - policy-section vectors;
 - wraps-section vectors;
+- metadata-section vectors;
 - acceptance and rejection cases;
 - distribution pattern for implementations in different languages.
 
@@ -229,7 +230,98 @@ Expected result:
 - `reject`
 - `error.code = DuplicateWrapperId`
 
-## 7. Case naming
+## 7. Initial minimum set (metadata section)
+
+### 7.1 Case METADATA-ACCEPT-001
+
+Description:
+
+- valid metadata section with version 1, zeroed reserved bytes, and non-empty ciphertext.
+
+Operation:
+
+- `parse_metadata_section`
+
+Expected result:
+
+- `accept`
+
+### 7.2 Case METADATA-REJECT-001
+
+Description:
+
+- metadata section with unsupported metadata version.
+
+Operation:
+
+- `parse_metadata_section`
+
+Expected result:
+
+- `reject`
+- `error.code = UnsupportedMetadataVersion`
+
+### 7.3 Case METADATA-REJECT-002
+
+Description:
+
+- metadata section with non-zero reserved bytes.
+
+Operation:
+
+- `parse_metadata_section`
+
+Expected result:
+
+- `reject`
+- `error.code = NonZeroReserved`
+
+### 7.4 Case METADATA-REJECT-003
+
+Description:
+
+- metadata section with truncated ciphertext bytes.
+
+Operation:
+
+- `parse_metadata_section`
+
+Expected result:
+
+- `reject`
+- `error.code = TruncatedCiphertext`
+
+### 7.5 Case METADATA-REJECT-004
+
+Description:
+
+- metadata section with empty ciphertext declaration.
+
+Operation:
+
+- `parse_metadata_section`
+
+Expected result:
+
+- `reject`
+- `error.code = EmptyCiphertext`
+
+### 7.6 Case METADATA-REJECT-005
+
+Description:
+
+- metadata section with trailing bytes after declared ciphertext length.
+
+Operation:
+
+- `parse_metadata_section`
+
+Expected result:
+
+- `reject`
+- `error.code = InvalidCiphertextLength`
+
+## 8. Case naming
 
 Pattern:
 
@@ -242,7 +334,7 @@ Examples:
 - `WRAP-ACCEPT-003`
 - `PAYLOAD-REJECT-010`
 
-## 8. Conformance rules
+## 9. Conformance rules
 
 For fixed header, an implementation is conformant when it:
 
@@ -262,11 +354,16 @@ For wraps section, an implementation is conformant when it:
 - rejects all `WRAPS-REJECT-*` cases;
 - returns an error consistent with the expected category.
 
-## 9. Open items
+For metadata section, an implementation is conformant when it:
+
+- accepts all `METADATA-ACCEPT-*` cases;
+- rejects all `METADATA-REJECT-*` cases;
+- returns an error consistent with the expected category.
+
+## 10. Open items
 
 This draft still needs:
 
-- encrypted metadata vectors;
 - payload/manifest/footer vectors;
 - corruption and downgrade vectors;
 - password mode and asymmetric wrapper vectors;

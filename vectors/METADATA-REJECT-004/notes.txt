@@ -1,0 +1,1 @@
+Ciphertext length set to zero is invalid in v1.

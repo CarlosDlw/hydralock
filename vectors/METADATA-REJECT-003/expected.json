@@ -1,0 +1,9 @@
+{
+  "case_id": "METADATA-REJECT-003",
+  "version": "1",
+  "operation": "parse_metadata_section",
+  "expect": "reject",
+  "error": {
+    "code": "TruncatedCiphertext"
+  }
+}

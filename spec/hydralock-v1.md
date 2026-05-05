@@ -230,19 +230,68 @@ Current reference implementation:
   - `DuplicateWrapperId`
   - `LengthOverflow`
 
-## 11. Open items to finalize v1
+  ## 11. Metadata Section (normative, initial)
+
+  ### 11.1 Layout
+
+  The metadata section has an 8-byte fixed header followed by encrypted metadata
+  ciphertext.
+
+  Metadata section header:
+
+  ```text
+  Offset  Size  Field
+  0       2     metadata_version (u16)
+  2       2     reserved (bytes)
+  4       4     ciphertext_len (u32)
+  8       N     ciphertext bytes
+  ```
+
+  ### 11.2 Mandatory rules
+
+  - `metadata_version` MUST be `1` in v1.
+  - `reserved` MUST contain only zero bytes.
+  - `ciphertext_len` MUST be greater than zero.
+  - Parser MUST consume the section exactly, with no trailing bytes.
+
+  ### 11.3 Mandatory parser errors
+
+  Implementations MUST reject:
+
+  - unsupported `metadata_version`;
+  - non-zero `reserved` bytes;
+  - `ciphertext_len == 0`;
+  - truncated ciphertext bytes;
+  - section with trailing bytes after declared `ciphertext_len`.
+
+  ### 11.4 Rust reference mapping
+
+  Current reference implementation:
+
+  - file: `src/format/metadata.rs`
+  - constants:
+    - `METADATA_HEADER_LEN = 8`
+  - errors:
+    - `InvalidLength`
+    - `UnsupportedMetadataVersion`
+    - `NonZeroReserved`
+    - `EmptyCiphertext`
+    - `TruncatedCiphertext`
+    - `InvalidCiphertextLength`
+    - `LengthOverflow`
+
+  ## 12. Open items to finalize v1
 
 This draft does not yet finalize:
 
-- byte-level definition of metadata section;
 - byte-level definition of payload and footer;
 - final extensibility rules;
 - complete normative algorithms for encrypt/decrypt/verify/rewrap;
 - final full suite and wrapper definitions.
 
-## 12. Immediate next steps
+## 13. Immediate next steps
 
 1. Define header-to-section offset invariants across all sections.
-2. Extend vectors specification with metadata and footer corruption cases.
-3. Freeze metadata section fields and validations.
-4. Freeze footer section fields and validations.
+2. Extend vectors specification with footer corruption cases.
+3. Freeze footer section fields and validations.
+4. Define metadata canonical plaintext layout and AAD binding.
