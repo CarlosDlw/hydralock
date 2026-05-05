@@ -7,7 +7,7 @@ edition = "2024"
 anyhow = "1"
 blake3 = "1"
 hkdf = "0.12"
-sha2 = "0.10"
+sha2 = "0.11"
 zeroize = { version = "1", features = ["derive"] }
 subtle = "2"
 secrecy = "0.8"
