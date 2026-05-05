@@ -9,9 +9,15 @@ pub type Fmk = secrecy::Secret<[u8; 32]>;
 
 /// Generic 32-byte derived secret key.
 ///
-/// Zeroed automatically when dropped.
+/// Zeroed automatically when dropped. `Debug` output is intentionally opaque.
 #[derive(Clone, Zeroize, ZeroizeOnDrop)]
 pub struct SecretKey32([u8; 32]);
+
+impl core::fmt::Debug for SecretKey32 {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("SecretKey32([REDACTED])")
+    }
+}
 
 impl SecretKey32 {
     pub fn from_bytes(bytes: [u8; 32]) -> Self {
