@@ -406,7 +406,7 @@ fn gen_mlkem_accept_001() {
             "x25519_sk_hex": hex::encode(x25519_sk),
             "x25519_pk_hex": hex::encode(x25519_pk),
             "mlkem_dk_seed_hex": hex::encode(mlkem_seed),
-            "recipient_pk_mlkem_ek_hex": hex::encode(&sk2.public_key().mlkem768_ek_bytes),
+            "recipient_pk_mlkem_ek_hex": hex::encode(sk2.public_key().mlkem768_ek_bytes),
             "wrapper_id_label": "mlkem",
             "wrapper_type": "MlKem768X25519"
         }),

@@ -30,8 +30,7 @@ fn integration_small_file_passphrase_roundtrip() {
 fn integration_medium_file_x25519_roundtrip() {
     let plaintext = vec![0x42u8; 128 * 1024];
 
-    let mut rng = OsRng;
-    let sk = StaticSecret::random_from_rng(&mut rng);
+    let sk = StaticSecret::random_from_rng(OsRng);
     let pk = PublicKey::from(&sk).to_bytes();
 
     let recipients = vec![RecipientSpec::X25519 {
@@ -72,10 +71,10 @@ fn integration_multiple_wrappers_same_container() {
 
     let pass = b"multi-wrapper-pass".to_vec();
 
-    let mut rng = OsRng;
-    let x25519_sk = StaticSecret::random_from_rng(&mut rng);
+    let x25519_sk = StaticSecret::random_from_rng(OsRng);
     let x25519_pk = PublicKey::from(&x25519_sk).to_bytes();
 
+    let mut rng = OsRng;
     let mlkem_sk = MlKem768X25519RecipientSecretKey::generate_from_rng(&mut rng);
     let mlkem_pk = mlkem_sk.public_key();
 
