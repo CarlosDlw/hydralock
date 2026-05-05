@@ -22,6 +22,7 @@ File encryption container with hybrid post-quantum key encapsulation and rewrap 
    - 4.5 [Payload Section](#45-payload-section)
    - 4.6 [Footer Section](#46-footer-section)
 5. [CLI Usage](#5-cli-usage)
+      - 5.1 [Rust Library API](#51-rust-library-api)
 6. [Build](#6-build)
 7. [Performance Characteristics](#7-performance-characteristics)
 8. [Security Considerations](#8-security-considerations)
@@ -401,6 +402,49 @@ hydralock test-vectors
 | `-n` | --name | — | — | — |
 | `-m` | --mime | — | — | — |
 
+### 5.1 Rust Library API
+
+HydraLock exposes a stable facade under `hydralock::api` for application
+integration, while preserving low-level operations under
+`hydralock::api::low_level` for advanced use cases.
+
+High-level surface:
+
+- `hydralock::api::encrypt(plaintext, recipients, options)`
+- `hydralock::api::decrypt(container, key_material)`
+- `hydralock::api::rewrap_container(container, current_key, recipients, policy)`
+
+Minimal example:
+
+```rust
+use hydralock::api::{
+      EncryptOptions, KeyMaterial, RecipientSpec,
+      decrypt, encrypt,
+};
+use hydralock::crypto::password::Argon2Profile;
+
+let plaintext = b"hello hydralock";
+let recipients = vec![RecipientSpec::Passphrase {
+      passphrase: b"correct horse battery staple".to_vec(),
+      profile: Argon2Profile::Balanced,
+      label: None,
+}];
+
+let container = encrypt(plaintext, &recipients, EncryptOptions::default())?;
+let out = decrypt(
+      &container,
+      KeyMaterial::Passphrase(b"correct horse battery staple".to_vec()),
+)?;
+assert_eq!(out.plaintext, plaintext);
+```
+
+API invariants:
+
+- High-level API requires at least one recipient.
+- Default labels are deterministic (`pass{idx}` / `rcpt{idx}`).
+- Rewrap does not re-encrypt payload bytes; only wraps/policy/header/footer are rewritten.
+- `hydralock::api::low_level` is intentionally small to reduce accidental public API freeze.
+
 ---
 
 ## 6. Build
@@ -503,7 +547,7 @@ Alternative implementations are possible in any language. The cryptographic oper
 cargo test
 ```
 
-222+ tests covering:
+Current automated coverage includes unit, integration, and property tests:
 
 - Format parsing (header, policy, wraps, payload, footer)
 - AAD domain separation
@@ -517,6 +561,9 @@ cargo test
 - Passphrase stanza seal/open roundtrip
 - Shamir GF(256) share split/recombine
 - Full rewrap roundtrip (header, wraps, footer recomputed)
+- End-to-end API integration (small, medium, and large file roundtrip)
+- Multi-wrapper same-container decryptability (passphrase, X25519, ML-KEM)
+- Property tests (parser roundtrip, canonicalization, KDF invariants, threshold roundtrip)
 
 ### Integration test vectors
 
