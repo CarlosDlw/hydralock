@@ -565,6 +565,41 @@ Current automated coverage includes unit, integration, and property tests:
 - Multi-wrapper same-container decryptability (passphrase, X25519, ML-KEM)
 - Property tests (parser roundtrip, canonicalization, KDF invariants, threshold roundtrip)
 
+### Differential test vectors
+
+Three deterministic binary vectors are committed under `vectors/` — one per wrapper type:
+
+- `DIFF-PASS-001` — passphrase/Argon2id wrapper
+- `DIFF-X25519-001` — X25519 wrapper
+- `DIFF-MLKEM-001` — ML-KEM-768+X25519 hybrid wrapper
+
+Each vector ships with `container.hlock`, `plaintext.bin`, `key_material.json`, and `expected.json`.
+Vectors are regenerated via:
+
+```sh
+cargo test gen_diff -- --ignored --nocapture
+```
+
+The Rust differential harness validates all three vectors:
+
+```sh
+cargo test differential
+```
+
+### Python second implementation
+
+An independent Python implementation lives under `impl/python/` and cross-validates the format
+and cryptographic protocol against the differential vectors without using any Rust code.
+
+**Dependencies**: `blake3`, `argon2-cffi`, `kyber-py`, `cryptography`, `pycryptodome`, `cbor2`.
+
+```sh
+cd impl/python
+python3 -m pytest tests/test_differential_vectors.py -v
+```
+
+All three differential vectors pass 3/3.
+
 ### Integration test vectors
 
 ```sh
