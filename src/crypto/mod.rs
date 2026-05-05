@@ -5,5 +5,6 @@ pub mod metadata;
 pub mod password;
 pub mod payload_crypto;
 pub mod secret;
+pub mod shamir;
 pub mod verify;
 pub mod wrap;
