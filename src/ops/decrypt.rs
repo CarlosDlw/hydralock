@@ -2,6 +2,7 @@ use crate::crypto::aad::WrapperAadInput;
 use crate::crypto::kdf::{derive_root_key, derive_subkeys};
 use crate::crypto::metadata::{decrypt_metadata, MetadataEncryptionError};
 use crate::crypto::secret::{Fmk, SecretKey32, fmk_from_bytes};
+use crate::crypto::manifest::verify_manifest_root;
 use crate::crypto::verify::verify_container_no_decrypt;
 use crate::format::footer::{FooterSection, FooterSectionError};
 use crate::format::header::{FIXED_HEADER_LEN, FixedHeaderError};
@@ -127,7 +128,7 @@ pub fn decrypt(container: &[u8], key_material: &OpenKeyMaterial) -> Result<Decry
 
     let payload_end = scan_payload_end(container, payload_start)?;
     let footer_bytes = container.get(payload_end..).ok_or(DecryptError::ContainerTooShort)?;
-    let _footer = FooterSection::parse(footer_bytes).map_err(DecryptError::FooterParseFailed)?;
+    let footer = FooterSection::parse(footer_bytes).map_err(DecryptError::FooterParseFailed)?;
 
     let file_uuid = extract_file_uuid(&wraps.wrappers)?;
     let fmk = try_unwrap_fmk(&wraps.wrappers, key_material, suite_id, &header_hash, &file_uuid)?;
@@ -160,13 +161,25 @@ pub fn decrypt(container: &[u8], key_material: &OpenKeyMaterial) -> Result<Decry
     }
 
     let mut plaintext = Vec::with_capacity(metadata.plaintext_size as usize);
+    let mut chunk_cts: Vec<Vec<u8>> = Vec::with_capacity(payload_section.chunks.len());
     for chunk in &payload_section.chunks {
         let mut ct = chunk.ciphertext.clone();
         ct.extend_from_slice(&chunk.tag);
         let pt = reader.read_chunk(&ct, chunk.is_final()).map_err(DecryptError::PayloadDecrypt)?;
         plaintext.extend_from_slice(&pt);
+        chunk_cts.push(ct);
     }
     plaintext.truncate(metadata.plaintext_size as usize);
+
+    // Verify manifest root against actual chunk ciphertexts (defense-in-depth).
+    let expected_root: [u8; 32] = footer.manifest_root.as_slice()
+        .try_into()
+        .map_err(|_| DecryptError::VerifyFailed)?;
+    let manifest_ok = verify_manifest_root(&k_manifest, &chunk_cts, &expected_root)
+        .map_err(|_| DecryptError::VerifyFailed)?;
+    if !manifest_ok {
+        return Err(DecryptError::VerifyFailed);
+    }
 
     Ok(DecryptResult { plaintext, metadata })
 }

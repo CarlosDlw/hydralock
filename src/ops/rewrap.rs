@@ -38,8 +38,8 @@
 /// | `THRESHOLD` share       | 65                   |
 
 use crate::crypto::kdf::{derive_root_key, derive_subkeys};
-use crate::crypto::secret::Fmk;
-use crate::crypto::verify::build_footer;
+use crate::crypto::secret::{Fmk, SecretKey32};
+use crate::crypto::verify::{build_footer, verify_container_no_decrypt};
 use crate::format::footer::{FooterSection, FooterSectionError};
 use crate::format::header::{FIXED_HEADER_LEN, FixedHeader, FixedHeaderError};
 use crate::format::payload::PAYLOAD_HEADER_LEN;
@@ -74,6 +74,8 @@ pub enum RewrapError {
     HeaderFieldOverflow,
     /// The manifest_root in the original footer has an unexpected size.
     InvalidManifestRootSize { actual: usize },
+    /// The original container's footer auth_tag is invalid (container tampered or wrong FMK).
+    InvalidOriginalContainer,
 }
 
 impl core::fmt::Display for RewrapError {
@@ -201,6 +203,18 @@ pub fn rewrap_container(
                 actual: old_footer.manifest_root.len(),
             }
         })?;
+
+    // ── 5.5 Verify original container integrity before rewriting ─────────
+    // Ensures we are not rewrapping a tampered container. Requires deriving
+    // k_manifest from the provided FMK.
+    {
+        let orig_root_key = derive_root_key(fmk, file_uuid);
+        let orig_subkeys = derive_subkeys(&orig_root_key);
+        let orig_k_manifest = SecretKey32::from_bytes(*orig_subkeys.k_manifest.expose());
+        let orig_pre_footer = &container[..footer_start];
+        verify_container_no_decrypt(&orig_k_manifest, orig_pre_footer, old_footer_bytes)
+            .map_err(|_| RewrapError::InvalidOriginalContainer)?;
+    }
 
     // ── 6. Build the new wraps section ────────────────────────────────────
     let new_entry_sizes: Vec<(usize, usize)> = new_wrappers
@@ -774,24 +788,16 @@ mod tests {
         };
         let new_wrappers = vec![dummy_wrapper_entry(b"x", 94)];
 
-        // Rewrap with wrong FMK succeeds structurally but produces invalid auth_tag.
-        let result =
-            rewrap_container(&container, &wrong_fmk, &uuid, new_policy, new_wrappers).unwrap();
+        // Since §18: rewrap now verifies the original footer auth_tag before rewriting.
+        // Passing a wrong FMK causes the original verification to fail immediately.
+        let err =
+            rewrap_container(&container, &wrong_fmk, &uuid, new_policy, new_wrappers)
+                .unwrap_err();
 
-        let root_key = derive_root_key(&fmk, &uuid); // correct FMK
-        let subkeys = derive_subkeys(&root_key);
-        let new_fh = FixedHeader::parse(&result[..FIXED_HEADER_LEN]).unwrap();
-        let footer_start = scan_payload_end(&result, new_fh.payload_offset as usize).unwrap();
-
-        let err = verify_container_no_decrypt(
-            &subkeys.k_manifest,
-            &result[..footer_start],
-            &result[footer_start..],
-        )
-        .unwrap_err();
-
-        use crate::crypto::verify::VerifyError;
-        assert!(matches!(err, VerifyError::FooterAuthTagMismatch));
+        assert!(
+            matches!(err, RewrapError::InvalidOriginalContainer),
+            "expected InvalidOriginalContainer, got {err:?}"
+        );
     }
 
     // ── scan_payload_end ──────────────────────────────────────────────────

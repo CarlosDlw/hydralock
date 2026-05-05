@@ -14,7 +14,6 @@ const LABEL_MANIFEST: &[u8] = b"hydralock:v1:manifest";
 const LABEL_PAYLOAD_MASTER: &[u8] = b"hydralock:v1:payload-master";
 const LABEL_PADDING: &[u8] = b"hydralock:v1:padding";
 const LABEL_REWRAP: &[u8] = b"hydralock:v1:rewrap";
-const LABEL_EPOCH: &[u8] = b"hydralock:v1:epoch";
 const LABEL_CHUNK_KEY: &[u8] = b"hydralock:v1:chunk-key";
 const LABEL_CHUNK_NONCE: &[u8] = b"hydralock:v1:chunk-nonce";
 
@@ -57,9 +56,14 @@ pub fn derive_subkeys(root_key: &SecretKey32) -> SubkeySet {
 
 /// Derive the key for epoch `epoch_index` from `k_payload_master`.
 ///
-/// Algorithm: BLAKE3_keyed(key=k_payload_master, data=LABEL_EPOCH || u32_be(epoch_index))
+/// Algorithm: BLAKE3_keyed(key=k_payload_master, data=LABEL_CHUNK_KEY || u32_be(epoch_index))
+///
+/// Note: Both epoch-key and chunk-key derivation intentionally use `LABEL_CHUNK_KEY`.
+/// Domain separation between the two levels is provided by the distinct input keys:
+/// `k_payload_master` (KDF root) vs `k_epoch_i` (derived per-epoch). These can never
+/// collide, so reusing the same label is safe and this choice is normative for v1.
 pub fn derive_epoch_key(k_payload_master: &SecretKey32, epoch_index: u32) -> SecretKey32 {
-    blake3_derive_indexed(k_payload_master.expose(), LABEL_EPOCH, epoch_index)
+    blake3_derive_indexed(k_payload_master.expose(), LABEL_CHUNK_KEY, epoch_index)
 }
 
 // ── Chunk-level derivation ───────────────────────────────────────────────────

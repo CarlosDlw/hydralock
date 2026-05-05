@@ -433,7 +433,36 @@ This draft does not yet finalize:
 - complete normative algorithms for encrypt/decrypt/verify/rewrap;
 - final full suite and wrapper definitions.
 
-## 15. Immediate next steps
+## 15. Normative `wrapper_id` convention
+
+The `wrapper_id` field in the wraps section encodes both the container's file UUID
+and an optional opaque recipient label using the following layout:
+
+```text
+wrapper_id = file_uuid (16 bytes) || recipient_label (0..N bytes)
+```
+
+- `file_uuid`: MUST be exactly the 16-byte UUID also stored inside the encrypted
+  metadata. This prefix is available in plaintext and is the only mechanism to
+  bootstrap the File Master Key derivation without first decrypting the metadata.
+- `recipient_label`: an optional, opaque byte sequence assigned by the sealer.
+  Its content is not interpreted by the format.
+
+Normative rules:
+
+- All `wrapper_id` values in a single container MUST share the same `file_uuid`
+  prefix (the first 16 bytes). An implementation MUST reject or ignore wrappers
+  whose `file_uuid` prefix does not match the `file_uuid` from the first wrapper.
+- `wrapper_id` MUST be at least 16 bytes (enforced by the requirement that
+  `wrapper_id_len > 0` combined with the minimum 16-byte prefix).
+- Implementations that discover `wrapper_id` values shorter than 16 bytes MUST
+  treat the container as invalid and abort.
+
+Rust reference:
+- `ops::decrypt::extract_file_uuid` extracts `wrapper_id[0..16]` from the first wrapper.
+- `ops::encrypt::WrapperSpec::wire_id` constructs `file_uuid || label`.
+
+## 16. Immediate next steps
 
 1. Define header-to-section offset invariants across all sections.
 2. Extend vectors specification with payload corruption cases.

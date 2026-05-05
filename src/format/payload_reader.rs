@@ -7,7 +7,7 @@
 /// - Truncation is detected by checking is_final on the last provided chunk;
 ///   reading additional chunks after is_final is an error.
 
-use crate::crypto::kdf::{derive_chunk_key, derive_chunk_nonce};
+use crate::crypto::kdf::{derive_chunk_key, derive_chunk_nonce, derive_epoch_key};
 use crate::crypto::payload_crypto::{decrypt_chunk, PayloadCryptoError};
 use crate::crypto::secret::SecretKey32;
 
@@ -120,7 +120,7 @@ impl PayloadReader {
         let plaintext_chunk_len = (ciphertext_with_tag.len() - POLY1305_TAG_SIZE) as u32;
 
         // Derive keys for the current position.
-        let k_epoch = derive_chunk_key(&self.k_payload_master, self.epoch_index);
+        let k_epoch = derive_epoch_key(&self.k_payload_master, self.epoch_index);
         let k_chunk = derive_chunk_key(&k_epoch, self.chunk_index_in_epoch);
         let n_chunk = derive_chunk_nonce(&k_epoch, self.chunk_index_in_epoch);
 

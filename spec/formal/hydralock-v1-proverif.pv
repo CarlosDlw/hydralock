@@ -1,0 +1,330 @@
+(* HydraLock v1 — ProVerif Security Analysis
+   ============================================
+
+   This document models the HydraLock v1 wrapping subprotocols in the applied
+   pi-calculus style used by ProVerif. It specifies the security goals and the
+   cryptographic structure of each wrapper type for automated symbolic verification.
+
+   Security goals modelled:
+     1. Secrecy of FMK: an attacker who does not hold a recipient secret key
+        cannot derive the File Master Key from the container.
+     2. Wrapper binding: a stanza sealed for recipient A at position i cannot
+        be used to open a container for recipient B or at position j.
+     3. Rewrap integrity: rewrapping with the correct FMK does not expose the FMK
+        to a passive attacker who observes only the new container.
+     4. Passphrase resistance: the strength of the passphrase wrapper is bounded
+        by the Argon2id hardness, not by weak symmetric wrapping.
+
+   Verification approach:
+     - All cryptographic primitives are abstracted as ideal functions
+       (Dolev-Yao model with perfect encryption / UF-CMA MACs).
+     - The HKDF and BLAKE3 KDF calls are modelled as perfect PRFs.
+     - AES-256-GCM-SIV is modelled as IND-CCA2 authenticated encryption.
+     - X25519 and ML-KEM-768 are modelled as secure KEMs.
+     - Argon2id is modelled as a one-way function whose inverse requires
+       an active brute-force query.
+
+   Note: Full ProVerif syntax requires a complete theory file. This document
+   captures the abstract structure and security queries. A runnable ProVerif
+   model can be mechanically derived from the structure below.
+*)
+
+
+(* ── Channels and names ────────────────────────────────────────────────────── *)
+
+(* Public channel: attacker can read and write *)
+free c: channel.
+
+(* Private names: not known to attacker initially *)
+free fmk:      bitstring [private].  (* File Master Key *)
+free file_uuid: bitstring [private].  (* 16-byte file UUID *)
+free pass:     bitstring [private].  (* passphrase *)
+free sk_alice: bitstring [private].  (* Alice's X25519 secret key *)
+
+
+(* ── Cryptographic function signatures ─────────────────────────────────────── *)
+
+(* HKDF-SHA-512 *)
+fun hkdf(salt: bitstring, ikm: bitstring, info: bitstring): bitstring.
+
+(* BLAKE3 keyed hash *)
+fun blake3_keyed(key: bitstring, data: bitstring): bitstring.
+
+(* BLAKE3 keyed hash with index *)
+fun blake3_keyed_idx(key: bitstring, label: bitstring, idx: nat): bitstring.
+
+(* AES-256-GCM-SIV: authenticated encryption *)
+fun aead_enc(key: bitstring, nonce: bitstring, plaintext: bitstring, aad: bitstring): bitstring.
+fun aead_dec(key: bitstring, nonce: bitstring, ciphertext: bitstring, aad: bitstring): bitstring
+  reduc forall k, n, p, a: bitstring;
+    aead_dec(k, n, aead_enc(k, n, p, a), a) = p.
+
+(* X25519 Diffie-Hellman *)
+fun x25519_pk(sk: bitstring): bitstring.        (* public key from secret key *)
+fun x25519_dh(sk: bitstring, pk: bitstring): bitstring.  (* DH shared secret *)
+equation forall sk1, sk2: bitstring;
+  x25519_dh(sk1, x25519_pk(sk2)) = x25519_dh(sk2, x25519_pk(sk1)).
+
+(* ML-KEM-768 *)
+fun mlkem_pk(dk: bitstring): bitstring.          (* encapsulation key from decapsulation key *)
+fun mlkem_encaps(ek: bitstring, rand: bitstring): bitstring.   (* ciphertext *)
+fun mlkem_ss(ek: bitstring, rand: bitstring): bitstring.       (* shared secret from sender *)
+fun mlkem_decaps(dk: bitstring, ct: bitstring): bitstring      (* shared secret from receiver *)
+  reduc forall dk, r: bitstring;
+    mlkem_decaps(dk, mlkem_encaps(mlkem_pk(dk), r)) = mlkem_ss(mlkem_pk(dk), r).
+
+(* Argon2id: one-way, parameterised *)
+fun argon2id(params: bitstring, salt: bitstring, password: bitstring): bitstring.
+
+
+(* ── KDF tree ──────────────────────────────────────────────────────────────── *)
+
+let derive_root(fmk: bitstring, uuid: bitstring): bitstring =
+  hkdf(uuid, fmk, "hydralock:v1:root").
+
+let derive_k_control(root: bitstring): bitstring =
+  blake3_keyed(root, "hydralock:v1:control").
+
+let derive_k_manifest(root: bitstring): bitstring =
+  blake3_keyed(root, "hydralock:v1:manifest").
+
+let derive_k_payload_master(root: bitstring): bitstring =
+  blake3_keyed(root, "hydralock:v1:payload-master").
+
+(* Epoch key: intentionally uses "chunk-key" label — normative v1 decision. *)
+let derive_epoch_key(kpm: bitstring, epoch_idx: nat): bitstring =
+  blake3_keyed_idx(kpm, "hydralock:v1:chunk-key", epoch_idx).
+
+let derive_chunk_key(k_epoch: bitstring, chunk_idx: nat): bitstring =
+  blake3_keyed_idx(k_epoch, "hydralock:v1:chunk-key", chunk_idx).
+
+
+(* ── Wrapper AAD construction ─────────────────────────────────────────────── *)
+
+(* wrapper_aad = suite_id || 0x03 || wrapper_index || file_uuid || header_hash *)
+fun wrapper_aad(suite_id: bitstring, wrapper_idx: nat,
+                uuid: bitstring, header_hash: bitstring): bitstring.
+
+
+(* ── PASS-ARGON2ID subprotocol ─────────────────────────────────────────────── *)
+
+(*
+  Sealer:
+    params := (memory_kib, time_cost, parallelism)
+    salt   := random 32 bytes
+    nonce  := random 12 bytes
+    kek    := Argon2id(params, salt, passphrase)
+    stanza := salt || nonce || AES-GCM-SIV_enc(kek, nonce, fmk_share, wrapper_aad)
+
+  Opener:
+    kek    := Argon2id(params_from_stanza, salt_from_stanza, passphrase)
+    fmk_share := AES-GCM-SIV_dec(kek, nonce_from_stanza, wrapped_from_stanza, wrapper_aad)
+
+  Security goal (PASS-ARGON2ID secrecy):
+    query attacker(fmk).
+    (* The attacker cannot learn fmk from the container without knowing `pass`. *)
+
+  Verification note:
+    In the Dolev-Yao model, Argon2id is a one-way function. The attacker can query
+    it (brute force), but each query costs `params` effort. This models the
+    practical hardness of offline dictionary attacks.
+    The secrecy of fmk reduces to the hardness of inverting argon2id on `pass`.
+*)
+
+let pass_seal(fmk: bitstring, pass: bitstring,
+              params: bitstring, salt: bitstring, nonce: bitstring,
+              suite_id: bitstring, widx: nat, uuid: bitstring, hh: bitstring) =
+  let kek = argon2id(params, salt, pass) in
+  let aad = wrapper_aad(suite_id, widx, uuid, hh) in
+  let wrapped = aead_enc(kek, nonce, fmk, aad) in
+  out(c, (params, salt, nonce, wrapped)).
+
+let pass_open(pass: bitstring,
+              suite_id: bitstring, widx: nat, uuid: bitstring, hh: bitstring) =
+  in(c, (params: bitstring, salt: bitstring, nonce: bitstring, wrapped: bitstring));
+  let kek = argon2id(params, salt, pass) in
+  let aad = wrapper_aad(suite_id, widx, uuid, hh) in
+  let fmk_recovered = aead_dec(kek, nonce, wrapped, aad) in
+  (* fmk_recovered should equal the original fmk *)
+  out(c, fmk_recovered).
+
+
+(* ── X25519 subprotocol ────────────────────────────────────────────────────── *)
+
+(*
+  Sealer:
+    eph_sk, eph_pk := generate ephemeral X25519 keypair
+    ss             := X25519(eph_sk, recipient_pk)
+    kek            := HKDF(salt=eph_pk||recipient_pk, ikm=ss, info="hydralock:v1:x25519-kek")
+    nonce          := random 12 bytes
+    stanza         := eph_pk || nonce || AES-GCM-SIV_enc(kek, nonce, fmk_share, wrapper_aad)
+
+  Opener:
+    ss             := X25519(recipient_sk, eph_pk)
+    kek            := HKDF (same derivation)
+    fmk_share      := AES-GCM-SIV_dec(kek, nonce, wrapped, wrapper_aad)
+
+  Security goal (X25519 secrecy):
+    query attacker(fmk).
+    (* The attacker cannot learn fmk without knowing recipient_sk. *)
+
+  Security goal (wrapper binding):
+    A stanza created with wrapper_aad(suite_id, i, uuid, hh) cannot be
+    authenticated under wrapper_aad(suite_id, j, uuid, hh) for i ≠ j,
+    because the AEAD tag covers the AAD and will fail.
+*)
+
+let x25519_seal(fmk: bitstring, recipient_pk: bitstring,
+                eph_sk: bitstring, nonce: bitstring,
+                suite_id: bitstring, widx: nat, uuid: bitstring, hh: bitstring) =
+  let eph_pk = x25519_pk(eph_sk) in
+  let ss     = x25519_dh(eph_sk, recipient_pk) in
+  let kek    = hkdf((eph_pk, recipient_pk), ss, "hydralock:v1:x25519-kek") in
+  let aad    = wrapper_aad(suite_id, widx, uuid, hh) in
+  let wrapped = aead_enc(kek, nonce, fmk, aad) in
+  out(c, (eph_pk, nonce, wrapped)).
+
+let x25519_open(sk: bitstring,
+                suite_id: bitstring, widx: nat, uuid: bitstring, hh: bitstring) =
+  in(c, (eph_pk: bitstring, nonce: bitstring, wrapped: bitstring));
+  let recipient_pk = x25519_pk(sk) in
+  let ss     = x25519_dh(sk, eph_pk) in
+  let kek    = hkdf((eph_pk, recipient_pk), ss, "hydralock:v1:x25519-kek") in
+  let aad    = wrapper_aad(suite_id, widx, uuid, hh) in
+  let fmk_recovered = aead_dec(kek, nonce, wrapped, aad) in
+  out(c, fmk_recovered).
+
+
+(* ── ML-KEM-768 + X25519 hybrid subprotocol ───────────────────────────────── *)
+
+(*
+  Sealer:
+    eph_sk, eph_pk := generate ephemeral X25519 keypair
+    ss_x25519      := X25519(eph_sk, recipient_x25519_pk)
+    ct_mlkem, ss_mlkem := MLKEM768.Encaps(recipient_ek, random)
+    kek            := HKDF(salt=eph_pk||recipient_x25519_pk,
+                           ikm=ss_x25519||ss_mlkem,
+                           info="hydralock:v1:mlkem768-x25519-kek")
+    nonce          := random 12 bytes
+    stanza         := eph_pk || ct_mlkem || nonce || AES-GCM-SIV_enc(kek, nonce, fmk, aad)
+
+  Security goal (hybrid secrecy):
+    query attacker(fmk).
+    (* An attacker must break BOTH X25519 and ML-KEM-768 to learn fmk.
+       Formally: secrecy holds even if one of the two KEM components is
+       broken (classical or quantum adversary), as long as the other holds. *)
+
+  Hybrid security argument:
+    If ss_x25519 is compromised (e.g., by a quantum adversary), the HKDF ikm
+    still includes ss_mlkem. An attacker who knows ss_x25519 but not ss_mlkem
+    cannot derive kek and thus cannot unwrap fmk.
+    Symmetrically, if ss_mlkem is compromised (classical cryptanalysis),
+    ss_x25519 still contributes to kek.
+    The HKDF construction ensures that both secrets are indistinguishably
+    mixed: kek is computationally indistinguishable from random unless the
+    attacker knows the pre-image of BOTH inputs.
+*)
+
+let mlkem_x25519_seal(fmk: bitstring,
+                       x25519_pk_r: bitstring, ek_mlkem: bitstring,
+                       eph_sk: bitstring, mlkem_rand: bitstring, nonce: bitstring,
+                       suite_id: bitstring, widx: nat, uuid: bitstring, hh: bitstring) =
+  let eph_pk     = x25519_pk(eph_sk) in
+  let ss_x25519  = x25519_dh(eph_sk, x25519_pk_r) in
+  let ct_mlkem   = mlkem_encaps(ek_mlkem, mlkem_rand) in
+  let ss_mlkem   = mlkem_ss(ek_mlkem, mlkem_rand) in
+  let kek = hkdf((eph_pk, x25519_pk_r),
+                 (ss_x25519, ss_mlkem),
+                 "hydralock:v1:mlkem768-x25519-kek") in
+  let aad = wrapper_aad(suite_id, widx, uuid, hh) in
+  let wrapped = aead_enc(kek, nonce, fmk, aad) in
+  out(c, (eph_pk, ct_mlkem, nonce, wrapped)).
+
+
+(* ── ProVerif security queries ─────────────────────────────────────────────── *)
+
+(*
+  Query 1: FMK secrecy under passphrase wrapper.
+  Holds if the attacker cannot derive fmk without brute-forcing argon2id(pass).
+
+    query attacker(fmk).
+
+  Query 2: FMK secrecy under X25519 wrapper.
+  Holds if the attacker cannot derive fmk without knowing sk_alice.
+
+    query attacker(fmk).
+
+  Query 3: FMK secrecy under ML-KEM-768 + X25519 hybrid.
+  Holds even if the attacker breaks X25519 or ML-KEM-768 individually.
+
+    query attacker(fmk).
+
+  Query 4: Wrapper position binding.
+  A stanza created for position i cannot authenticate at position j ≠ i.
+
+    query
+      attacker(fmk_at_position_j)
+    given
+      stanza_sealed_at_position_i.
+
+  Query 5: Cross-container binding.
+  A stanza from container A (with uuid_A, header_hash_A) cannot authenticate
+  in container B (with uuid_B ≠ uuid_A or header_hash_B ≠ header_hash_A).
+
+    query attacker(fmk_B) given container_A_stanza.
+*)
+
+
+(* ── Rewrap confidentiality property ──────────────────────────────────────── *)
+
+(*
+  After rewrap, the FMK must remain secret to all parties except those holding
+  a valid recipient key in the new wrapper set.
+
+  Informally:
+    forall container C, fmk F, new_wrappers W:
+      rewrap(C, F, W) produces C' such that:
+        - attacker(F) remains false (FMK is not exposed during rewrap)
+        - payload(C') = payload(C)             (payload not re-encrypted)
+        - manifest_root(C') = manifest_root(C) (manifest preserved)
+        - footer_auth_tag(C') is valid under F (integrity maintained)
+
+  Note: The reference implementation verifies the original footer auth_tag
+  before rewriting (added in §18), ensuring only authentic containers
+  can be rewrapped with a given FMK.
+*)
+
+
+(* ── Composition safety note ──────────────────────────────────────────────── *)
+
+(*
+  The overall security of HydraLock v1 composes because:
+
+  1. The KDF tree is a PRF tree: each subkey is computationally independent
+     of others, given the security of HKDF-SHA-512 and BLAKE3 as PRFs.
+
+  2. The metadata AEAD (AES-256-GCM-SIV) binds the plaintext_size,
+     chunk_size, epoch_size, and manifest_root to the k_control key.
+     Any modification to these fields invalidates the AEAD tag.
+
+  3. The payload AEAD (XChaCha20-Poly1305 per chunk) binds each chunk to
+     its (epoch, chunk, file_uuid, suite_id, header_hash, plaintext_len,
+     is_final) tuple. Reordering, splicing, or truncation of chunks is
+     detected at the first mismatched AEAD tag.
+
+  4. The footer auth_tag (BLAKE3_keyed over pre-footer bytes) binds all
+     sections before the footer, closing the integrity chain at the file
+     level.
+
+  5. The manifest root (BLAKE3_keyed over all chunk hashes) provides a
+     secondary integrity check over the complete ordered chunk sequence,
+     verified during decryption (added in §18).
+
+  These five layers are independent in the sense that breaking any one of
+  them requires compromising a different key. The only single point of
+  failure is the FMK itself: anyone who holds the FMK can compute all
+  subkeys and forge any section. This is the intended design for a
+  single-master-key envelope scheme.
+*)
+
+(* ── End of formal model ─────────────────────────────────────────────────── *)
