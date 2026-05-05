@@ -1,0 +1,6 @@
+# Ignore build artifacts and other generated files
+/target
+
+# Implementation-specific and plan files
+PLAN.md
+TODO.md
