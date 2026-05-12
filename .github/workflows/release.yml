@@ -86,7 +86,7 @@ jobs:
           merge-multiple: true
 
       - name: Remove existing assets for this tag
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const tag = context.ref.replace('refs/tags/', '');
